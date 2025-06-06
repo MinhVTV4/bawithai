@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BA Studio - Trợ lý AI cho sinh viên</title>
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <style>
+        :root {
+            --sidebar-bg: #1e293b;
+            --main-bg: #f1f5f9;
+            --text-light: #f8fafc;
+            --text-dark: #334155;
+            --accent-color: #3b82f6;
+            --accent-hover: #2563eb;
+        }
+
+        body { 
+            font-family: 'Inter', sans-serif; 
+            margin: 0; 
+            background-color: var(--main-bg); 
+            color: var(--text-dark);
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Sidebar Styles */
+        #sidebar {
+            width: 250px;
+            background-color: var(--sidebar-bg);
+            color: var(--text-light);
+            padding: 20px 0;
+            display: flex;
+            flex-direction: column;
+            transition: width 0.3s ease;
+        }
+        #sidebar-header {
+            padding: 0 20px 20px 20px;
+            font-size: 1.5rem;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        #sidebar-header .fa-brain {
+            color: var(--accent-color);
+        }
+        .nav-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            flex-grow: 1;
+        }
+        .nav-item a {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            padding: 15px 20px;
+            color: var(--text-light);
+            text-decoration: none;
+            font-size: 1rem;
+            transition: background-color 0.2s, border-left 0.2s;
+            border-left: 4px solid transparent;
+        }
+        .nav-item a:hover {
+            background-color: #334155;
+        }
+        .nav-item a.active {
+            background-color: #475569;
+            border-left: 4px solid var(--accent-color);
+            font-weight: 600;
+        }
+        .nav-icon {
+            width: 20px;
+            text-align: center;
+        }
+        #sidebar-footer {
+            padding: 20px;
+            font-size: 0.8rem;
+            text-align: center;
+            color: #94a3b8;
+        }
+
+        /* Main Content Styles */
+        #main-content {
+            flex-grow: 1;
+            padding: 30px;
+            overflow-y: auto;
+        }
+
+        .module-content {
+            display: none; /* Hide all modules by default */
+        }
+        .module-content.active {
+            display: block; /* Show only the active module */
+        }
+
+        /* Re-styling the AI components for modules */
+        .module-header {
+            font-size: 2rem;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: var(--sidebar-bg);
+        }
+        .module-subheader {
+            font-size: 1rem;
+            color: #64748b;
+            margin-bottom: 30px;
+        }
+        .controls-box { 
+            margin-bottom: 20px; 
+            width: 100%;
+            max-width: 700px;
+            background-color: #fff;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+        }
+        textarea { 
+            width: 100%; 
+            padding: 12px; 
+            margin-bottom: 15px; 
+            border: 1px solid #cbd5e1; 
+            border-radius: 4px; 
+            box-sizing: border-box;
+            resize: vertical;
+            font-size: 16px;
+        }
+        button { 
+            padding: 12px 25px; 
+            background-color: var(--accent-color); 
+            color: white; 
+            border: none; 
+            border-radius: 4px; 
+            cursor: pointer; 
+            font-size: 17px;
+            transition: background-color 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font-weight: 600;
+        }
+        button:hover { background-color: var(--accent-hover); }
+        button:disabled {
+            background-color: #93c5fd;
+            cursor: not-allowed;
+        }
+        .response-box { 
+            margin-top: 20px; 
+            padding: 20px; 
+            border: 1px solid #e2e8f0; 
+            background-color: #fff; 
+            border-radius: 8px; 
+            min-height: 150px; 
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            width: 100%;
+            max-width: 700px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background-color 0.3s ease;
+        }
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-left-color: #fff;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+        }
+        .large-spinner {
+            width: 40px;
+            height: 40px;
+            border-width: 5px;
+            border-left-color: var(--accent-color);
+            margin: auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <aside id="sidebar">
+        <div id="sidebar-header">
+            <i class="fa-solid fa-brain"></i>
+            <span>BA Studio</span>
+        </div>
+        <ul class="nav-list">
+            <li class="nav-item">
+                <a href="#learning-room" class="nav-link active">
+                    <i class="fa-solid fa-book-open nav-icon"></i> 
+                    <span>BA Learning Room</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="#case-trainer" class="nav-link">
+                    <i class="fa-solid fa-chart-simple nav-icon"></i>
+                    <span>AI Case Trainer</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="#mock-interview" class="nav-link">
+                    <i class="fa-solid fa-microphone nav-icon"></i>
+                    <span>Mock Interview</span>
+                </a>
+            </li>
+             <li class="nav-item">
+                <a href="#report-generator" class="nav-link">
+                    <i class="fa-solid fa-file-invoice nav-icon"></i>
+                    <span>AI Report Generator</span>
+                </a>
+            </li>
+        </ul>
+        <div id="sidebar-footer">
+            <p>v0.1.0</p>
+        </div>
+    </aside>
+
+    <main id="main-content">
+        <!-- Module 1: BA Learning Room -->
+        <div id="learning-room" class="module-content active">
+            <h1 class="module-header">BA Learning Room</h1>
+            <p class="module-subheader">Đặt bất kỳ câu hỏi nào về khái niệm, lý thuyết trong ngành Business Analytics.</p>
+            <div class="controls-box">
+                <textarea id="promptInput" rows="4" placeholder="Ví dụ: Hồi quy logistic khác gì hồi quy tuyến tính?"></textarea>
+                <button id="sendPromptButton">
+                    <span id="buttonText">Hỏi Gemini</span>
+                    <div id="buttonSpinner" class="spinner" style="display: none;"></div>
+                </button>
+            </div>
+            <div id="responseContainer" class="response-box">Đặt câu hỏi để bắt đầu...</div>
+        </div>
+
+        <!-- Module 2: AI Case Trainer -->
+        <div id="case-trainer" class="module-content">
+             <h1 class="module-header">AI Case Trainer</h1>
+             <p class="module-subheader">Tải lên file CSV, AI sẽ hướng dẫn bạn phân tích từng bước.</p>
+             <p><i>(Chức năng này đang được xây dựng)</i></p>
+        </div>
+
+        <!-- Module 3: Mock Interview -->
+        <div id="mock-interview" class="module-content">
+             <h1 class="module-header">Mock Interview</h1>
+             <p class="module-subheader">Luyện tập phỏng vấn với nhà tuyển dụng AI.</p>
+             <p><i>(Chức năng này đang được xây dựng)</i></p>
+        </div>
+        
+         <!-- Module 4: AI Report Generator -->
+        <div id="report-generator" class="module-content">
+             <h1 class="module-header">AI Report Generator</h1>
+             <p class="module-subheader">Tự động tạo báo cáo từ dữ liệu của bạn.</p>
+             <p><i>(Chức năng này đang được xây dựng)</i></p>
+        </div>
+    </main>
+
+    <script type="module">
+        // 1. Import các hàm cần thiết từ Firebase SDKs
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.0/firebase-app.js";
+        import { getAI, getGenerativeModel, GoogleAIBackend } from "https://www.gstatic.com/firebasejs/11.9.0/firebase-ai.js";
+
+        // 2. Cấu hình Firebase của bạn
+        const firebaseConfig = {
+            apiKey: "AIzaSyAP6gEJJrq0YE0lzYT-EeuskY0C1XHP9wo",
+            authDomain: "bawithai.firebaseapp.com",
+            projectId: "bawithai",
+            storageBucket: "bawithai.appspot.com",
+            messagingSenderId: "75283657811",
+            appId: "1:75283657811:web:9c5c3e778396b9a340c2a6"
+        };
+
+        // 3. Khởi tạo Firebase App
+        const app = initializeApp(firebaseConfig);
+        console.log("Firebase App initialized for project 'bawithai'!");
+        
+        // --- LOGIC CHO GIAO DIỆN ---
+        const navLinks = document.querySelectorAll('.nav-link');
+        const moduleContents = document.querySelectorAll('.module-content');
+
+        function showModule(hash) {
+            const targetId = hash.substring(1); // Bỏ dấu #
+
+            navLinks.forEach(link => {
+                link.classList.toggle('active', link.hash === hash);
+            });
+
+            moduleContents.forEach(content => {
+                content.classList.toggle('active', content.id === targetId);
+            });
+        }
+        
+        // Hiển thị module dựa trên URL hash khi tải trang
+        window.addEventListener('DOMContentLoaded', () => {
+             const currentHash = window.location.hash || '#learning-room';
+             showModule(currentHash);
+        });
+        
+        // Thay đổi module khi click link
+        navLinks.forEach(link => {
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                const targetHash = e.currentTarget.hash;
+                window.location.hash = targetHash; // Cập nhật URL
+                showModule(targetHash);
+            });
+        });
+
+        // --- LOGIC CỦA AI (CHO MODULE 'learning-room') ---
+        const promptInput = document.getElementById('promptInput');
+        const sendPromptButton = document.getElementById('sendPromptButton');
+        const buttonText = document.getElementById('buttonText');
+        const buttonSpinner = document.getElementById('buttonSpinner');
+        const responseContainer = document.getElementById('responseContainer');
+
+        let model;
+        try {
+            const ai = getAI(app, { backend: new GoogleAIBackend() });
+            model = getGenerativeModel(ai, { model: "gemini-1.5-flash-latest" });
+            console.log("Generative Model instance created!");
+        } catch (e) {
+            console.error("Lỗi khi khởi tạo AI Model:", e);
+            responseContainer.textContent = `Lỗi khởi tạo AI Model: ${e.message}.`;
+        }
+        
+        async function callGeminiAPI() {
+            if (!model) {
+                responseContainer.textContent = "Mô hình AI chưa được khởi tạo.";
+                return;
+            }
+
+            const promptText = promptInput.value.trim();
+            if (!promptText) {
+                responseContainer.textContent = "Vui lòng nhập câu hỏi của bạn.";
+                return;
+            }
+
+            // Cập nhật giao diện khi đang tải
+            responseContainer.innerHTML = '<div class="large-spinner"></div>';
+            buttonText.textContent = 'Đang xử lý';
+            buttonSpinner.style.display = 'block';
+            sendPromptButton.disabled = true;
+
+            try {
+                // Thêm vai trò cho AI để có câu trả lời tốt hơn
+                const structuredPrompt = `Bạn là một giáo viên chuyên ngành Business Analytics, thân thiện và có khả năng giải thích các khái niệm phức tạp một cách đơn giản. Hãy trả lời câu hỏi sau của sinh viên: "${promptText}"`;
+                
+                const result = await model.generateContent(structuredPrompt);
+                const response = result.response;
+                const text = response.text();
+                
+                responseContainer.innerText = text;
+
+            } catch (error) {
+                console.error("Lỗi khi gọi Gemini API:", error);
+                responseContainer.innerText = `Lỗi: ${error.message}. Vui lòng kiểm tra Console (F12) để biết thêm chi tiết.`;
+            } finally {
+                // Khôi phục trạng thái nút
+                buttonText.textContent = 'Hỏi Gemini';
+                buttonSpinner.style.display = 'none';
+                sendPromptButton.disabled = false;
+            }
+        }
+
+        if (sendPromptButton) {
+            sendPromptButton.addEventListener("click", callGeminiAPI);
+        }
+    </script>
+</body>
+</html>
