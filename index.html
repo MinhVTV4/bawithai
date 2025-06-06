@@ -6,6 +6,14 @@
     <title>BA Studio - Trợ lý AI cho sinh viên</title>
     <!-- Font Awesome for icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <!-- Libraries for file reading -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.7.0/mammoth.browser.min.js"></script>
+    <script>
+        // Required setup for PDF.js
+        pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
+    </script>
     <style>
         :root {
             --sidebar-bg: #1e293b;
@@ -14,363 +22,340 @@
             --text-dark: #334155;
             --accent-color: #3b82f6;
             --accent-hover: #2563eb;
+            --user-message-bg: #e0f2fe;
+            --ai-message-bg: #ffffff;
+            --btn-secondary-bg: #e2e8f0;
         }
-
-        body { 
-            font-family: 'Inter', sans-serif; 
-            margin: 0; 
-            background-color: var(--main-bg); 
-            color: var(--text-dark);
-            display: flex;
-            height: 100vh;
-            overflow: hidden;
-        }
-
-        /* Sidebar Styles */
-        #sidebar {
-            width: 250px;
-            background-color: var(--sidebar-bg);
-            color: var(--text-light);
-            padding: 20px 0;
-            display: flex;
-            flex-direction: column;
-            transition: width 0.3s ease;
-        }
-        #sidebar-header {
-            padding: 0 20px 20px 20px;
-            font-size: 1.5rem;
-            font-weight: bold;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        #sidebar-header .fa-brain {
-            color: var(--accent-color);
-        }
-        .nav-list {
-            list-style: none;
-            padding: 0;
-            margin: 0;
-            flex-grow: 1;
-        }
-        .nav-item a {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-            padding: 15px 20px;
-            color: var(--text-light);
-            text-decoration: none;
-            font-size: 1rem;
-            transition: background-color 0.2s, border-left 0.2s;
-            border-left: 4px solid transparent;
-        }
-        .nav-item a:hover {
-            background-color: #334155;
-        }
-        .nav-item a.active {
-            background-color: #475569;
-            border-left: 4px solid var(--accent-color);
-            font-weight: 600;
-        }
-        .nav-icon {
-            width: 20px;
-            text-align: center;
-        }
-        #sidebar-footer {
-            padding: 20px;
-            font-size: 0.8rem;
-            text-align: center;
-            color: #94a3b8;
-        }
-
-        /* Main Content Styles */
-        #main-content {
-            flex-grow: 1;
-            padding: 30px;
-            overflow-y: auto;
-        }
-
-        .module-content {
-            display: none; /* Hide all modules by default */
-        }
-        .module-content.active {
-            display: block; /* Show only the active module */
-        }
-
-        /* Re-styling the AI components for modules */
-        .module-header {
-            font-size: 2rem;
-            font-weight: bold;
-            margin-bottom: 10px;
-            color: var(--sidebar-bg);
-        }
-        .module-subheader {
-            font-size: 1rem;
-            color: #64748b;
-            margin-bottom: 30px;
-        }
-        .controls-box { 
-            margin-bottom: 20px; 
-            width: 100%;
-            max-width: 700px;
-            background-color: #fff;
-            padding: 25px;
-            border-radius: 8px;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.05);
-        }
-        textarea { 
-            width: 100%; 
-            padding: 12px; 
-            margin-bottom: 15px; 
-            border: 1px solid #cbd5e1; 
-            border-radius: 4px; 
-            box-sizing: border-box;
-            resize: vertical;
-            font-size: 16px;
-        }
-        button { 
-            padding: 12px 25px; 
-            background-color: var(--accent-color); 
-            color: white; 
-            border: none; 
-            border-radius: 4px; 
-            cursor: pointer; 
-            font-size: 17px;
-            transition: background-color 0.3s ease;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            font-weight: 600;
-        }
+        body { font-family: 'Inter', sans-serif; margin: 0; background-color: var(--main-bg); color: var(--text-dark); display: flex; height: 100vh; overflow: hidden; }
+        #sidebar { width: 250px; background-color: var(--sidebar-bg); color: var(--text-light); padding: 20px 0; display: flex; flex-direction: column; flex-shrink: 0; }
+        #sidebar-header { padding: 0 20px 20px 20px; font-size: 1.5rem; font-weight: bold; display: flex; align-items: center; gap: 10px; }
+        .nav-list { list-style: none; padding: 0; margin: 0; flex-grow: 1; }
+        .nav-item a { display: flex; align-items: center; gap: 15px; padding: 15px 20px; color: var(--text-light); text-decoration: none; font-size: 1rem; transition: background-color 0.2s, border-left 0.2s; border-left: 4px solid transparent; }
+        .nav-item a:hover { background-color: #334155; }
+        .nav-item a.active { background-color: #475569; border-left: 4px solid var(--accent-color); font-weight: 600; }
+        .nav-icon { width: 20px; text-align: center; }
+        #main-content { flex-grow: 1; padding: 30px; overflow-y: auto; }
+        .module-content { display: none; }
+        .module-content.active { display: block; }
+        .module-header { font-size: 2rem; font-weight: bold; margin-bottom: 10px; color: var(--sidebar-bg); }
+        .module-subheader { font-size: 1rem; color: #64748b; margin-bottom: 30px; }
+        .controls-box, .chat-container { width: 100%; max-width: 800px; background-color: #fff; padding: 25px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.05); }
+        textarea { width: 100%; padding: 12px; margin-bottom: 15px; border: 1px solid #cbd5e1; border-radius: 4px; box-sizing: border-box; resize: vertical; font-size: 16px; }
+        button { padding: 10px 20px; background-color: var(--accent-color); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 1rem; transition: background-color 0.3s ease; display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-weight: 600; }
         button:hover { background-color: var(--accent-hover); }
-        button:disabled {
-            background-color: #93c5fd;
-            cursor: not-allowed;
-        }
-        .response-box { 
-            margin-top: 20px; 
-            padding: 20px; 
-            border: 1px solid #e2e8f0; 
-            background-color: #fff; 
-            border-radius: 8px; 
-            min-height: 150px; 
-            white-space: pre-wrap;
-            word-wrap: break-word;
-            width: 100%;
-            max-width: 700px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-            position: relative;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: background-color 0.3s ease;
-        }
-        .spinner {
-            border: 4px solid rgba(255, 255, 255, 0.3);
-            border-left-color: #fff;
-            border-radius: 50%;
-            width: 20px;
-            height: 20px;
-            animation: spin 1s linear infinite;
-        }
-        .large-spinner {
-            width: 40px;
-            height: 40px;
-            border-width: 5px;
-            border-left-color: var(--accent-color);
-            margin: auto;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
+        button:disabled { background-color: #93c5fd; cursor: not-allowed; }
+        .chat-history { height: 400px; overflow-y: auto; border: 1px solid #e2e8f0; padding: 10px; border-radius: 8px; margin-bottom: 15px; display: flex; flex-direction: column; }
+        .chat-message { padding: 10px 15px; border-radius: 12px; margin-bottom: 10px; max-width: 85%; line-height: 1.5; display: flex; align-items: flex-start; gap: 10px; }
+        .user-message { background-color: var(--user-message-bg); align-self: flex-end; margin-left: auto; }
+        .ai-message { background-color: var(--ai-message-bg); border: 1px solid #e2e8f0; align-self: flex-start; }
+        .chat-message .message-text { flex-grow: 1; }
+        .speak-btn { background: none; border: none; color: #64748b; cursor: pointer; padding: 0 5px; font-size: 1rem; opacity: 0.7; transition: opacity 0.2s; }
+        .speak-btn:hover { opacity: 1; color: var(--accent-color); }
+        .chat-input-form { display: flex; gap: 10px; }
+        .chat-input-form input { flex-grow: 1; padding: 12px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 16px; }
+        .large-spinner { width: 40px; height: 40px; border-width: 5px; border-left-color: var(--accent-color); margin: auto; animation: spin 1s linear infinite; }
+        .setup-group { margin-bottom: 25px; }
+        .setup-label { font-weight: 600; display: block; margin-bottom: 10px; }
+        .btn-group { display: flex; flex-wrap: wrap; gap: 10px; }
+        .btn-group button { background-color: var(--btn-secondary-bg); color: var(--text-dark); }
+        .btn-group button.selected { background-color: var(--accent-color); color: white; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
     <aside id="sidebar">
-        <div id="sidebar-header">
-            <i class="fa-solid fa-brain"></i>
-            <span>BA Studio</span>
-        </div>
+        <div id="sidebar-header"><i class="fa-solid fa-brain"></i><span>BA Studio</span></div>
         <ul class="nav-list">
-            <li class="nav-item">
-                <a href="#learning-room" class="nav-link active">
-                    <i class="fa-solid fa-book-open nav-icon"></i> 
-                    <span>BA Learning Room</span>
-                </a>
-            </li>
-            <li class="nav-item">
-                <a href="#case-trainer" class="nav-link">
-                    <i class="fa-solid fa-chart-simple nav-icon"></i>
-                    <span>AI Case Trainer</span>
-                </a>
-            </li>
-            <li class="nav-item">
-                <a href="#mock-interview" class="nav-link">
-                    <i class="fa-solid fa-microphone nav-icon"></i>
-                    <span>Mock Interview</span>
-                </a>
-            </li>
-             <li class="nav-item">
-                <a href="#report-generator" class="nav-link">
-                    <i class="fa-solid fa-file-invoice nav-icon"></i>
-                    <span>AI Report Generator</span>
-                </a>
-            </li>
+            <li class="nav-item"><a href="#learning-room" class="nav-link"><i class="fa-solid fa-book-open nav-icon"></i> <span>BA Learning Room</span></a></li>
+            <li class="nav-item"><a href="#case-trainer" class="nav-link"><i class="fa-solid fa-chart-simple nav-icon"></i> <span>AI Case Trainer</span></a></li>
+            <li class="nav-item"><a href="#mock-interview" class="nav-link"><i class="fa-solid fa-microphone nav-icon"></i> <span>Mock Interview</span></a></li>
         </ul>
-        <div id="sidebar-footer">
-            <p>v0.1.0</p>
-        </div>
     </aside>
 
     <main id="main-content">
         <!-- Module 1: BA Learning Room -->
-        <div id="learning-room" class="module-content active">
-            <h1 class="module-header">BA Learning Room</h1>
-            <p class="module-subheader">Đặt bất kỳ câu hỏi nào về khái niệm, lý thuyết trong ngành Business Analytics.</p>
-            <div class="controls-box">
-                <textarea id="promptInput" rows="4" placeholder="Ví dụ: Hồi quy logistic khác gì hồi quy tuyến tính?"></textarea>
-                <button id="sendPromptButton">
-                    <span id="buttonText">Hỏi Gemini</span>
-                    <div id="buttonSpinner" class="spinner" style="display: none;"></div>
-                </button>
-            </div>
-            <div id="responseContainer" class="response-box">Đặt câu hỏi để bắt đầu...</div>
+        <div id="learning-room" class="module-content">
+             <h1 class="module-header">BA Learning Room</h1>
+             <p class="module-subheader">Đặt bất kỳ câu hỏi nào về khái niệm, lý thuyết trong ngành Business Analytics.</p>
+             <div class="controls-box">
+                <textarea id="learning-prompt-input" rows="4" placeholder="Ví dụ: Hồi quy logistic khác gì hồi quy tuyến tính?"></textarea>
+                <button id="learning-send-button"><span>Hỏi Gemini</span></button>
+             </div>
+             <div id="learning-response-container" class="response-box">Đặt câu hỏi để bắt đầu...</div>
         </div>
 
         <!-- Module 2: AI Case Trainer -->
         <div id="case-trainer" class="module-content">
              <h1 class="module-header">AI Case Trainer</h1>
-             <p class="module-subheader">Tải lên file CSV, AI sẽ hướng dẫn bạn phân tích từng bước.</p>
-             <p><i>(Chức năng này đang được xây dựng)</i></p>
+             <p class="module-subheader">Bắt đầu một phiên phân tích bằng cách tải lên file dữ liệu.</p>
+             <div id="file-upload-section" class="controls-box">
+                <label for="fileInput" class="file-upload-wrapper"><i class="fa-solid fa-cloud-arrow-up"></i> <span id="file-upload-text">Nhấp để chọn file CSV, Excel, PDF hoặc DOCX</span></label>
+                <input type="file" id="fileInput" accept=".csv, .xlsx, .xls, .pdf, .docx">
+                <button id="analyzeFileButton" disabled><span>Bắt đầu Phân tích</span></button>
+             </div>
+             <div id="case-trainer-chat-section" class="chat-container" style="display: none;">
+                <div class="chat-history" id="case-trainer-chat-history"></div>
+                <form id="case-trainer-chat-form" class="chat-input-form">
+                    <input type="text" id="case-trainer-chat-input" placeholder="Đặt câu hỏi về tài liệu của bạn..." autocomplete="off">
+                    <button type="submit">Gửi</button>
+                </form>
+             </div>
         </div>
-
+        
         <!-- Module 3: Mock Interview -->
         <div id="mock-interview" class="module-content">
              <h1 class="module-header">Mock Interview</h1>
              <p class="module-subheader">Luyện tập phỏng vấn với nhà tuyển dụng AI.</p>
-             <p><i>(Chức năng này đang được xây dựng)</i></p>
-        </div>
-        
-         <!-- Module 4: AI Report Generator -->
-        <div id="report-generator" class="module-content">
-             <h1 class="module-header">AI Report Generator</h1>
-             <p class="module-subheader">Tự động tạo báo cáo từ dữ liệu của bạn.</p>
-             <p><i>(Chức năng này đang được xây dựng)</i></p>
+             <div id="interview-setup-section" class="controls-box">
+                <div class="setup-group"><span class="setup-label">1. Chọn ngôn ngữ:</span><div id="language-btn-group" class="btn-group"><button class="language-btn selected" data-lang="vietnamese">Tiếng Việt</button><button class="language-btn" data-lang="english">English</button></div></div>
+                <div class="setup-group"><span class="setup-label">2. Chọn chủ đề:</span><div id="topic-btn-group" class="btn-group"><button class="topic-btn" data-topic="Business Case">Tình huống Kinh doanh</button><button class="topic-btn" data-topic="SQL">Kiến thức SQL</button><button class="topic-btn" data-topic="Storytelling">Kể chuyện bằng Dữ liệu</button></div></div>
+                <button id="startInterviewButton" disabled>Bắt đầu Phỏng vấn</button>
+             </div>
+             <div id="interview-chat-section" class="chat-container" style="display: none;">
+                <div class="chat-history" id="interview-chat-history"></div>
+                <form id="interview-chat-input-form" class="chat-input-form"><input type="text" id="interview-chat-input" placeholder="Nhập câu trả lời của bạn..." autocomplete="off"><button type="submit">Gửi</button></form>
+             </div>
         </div>
     </main>
 
     <script type="module">
-        // 1. Import các hàm cần thiết từ Firebase SDKs
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.0/firebase-app.js";
         import { getAI, getGenerativeModel, GoogleAIBackend } from "https://www.gstatic.com/firebasejs/11.9.0/firebase-ai.js";
-
-        // 2. Cấu hình Firebase của bạn
-        const firebaseConfig = {
-            apiKey: "AIzaSyAP6gEJJrq0YE0lzYT-EeuskY0C1XHP9wo",
-            authDomain: "bawithai.firebaseapp.com",
-            projectId: "bawithai",
-            storageBucket: "bawithai.appspot.com",
-            messagingSenderId: "75283657811",
-            appId: "1:75283657811:web:9c5c3e778396b9a340c2a6"
-        };
-
-        // 3. Khởi tạo Firebase App
-        const app = initializeApp(firebaseConfig);
-        console.log("Firebase App initialized for project 'bawithai'!");
         
-        // --- LOGIC CHO GIAO DIỆN ---
-        const navLinks = document.querySelectorAll('.nav-link');
-        const moduleContents = document.querySelectorAll('.module-content');
-
-        function showModule(hash) {
-            const targetId = hash.substring(1); // Bỏ dấu #
-
-            navLinks.forEach(link => {
-                link.classList.toggle('active', link.hash === hash);
-            });
-
-            moduleContents.forEach(content => {
-                content.classList.toggle('active', content.id === targetId);
-            });
-        }
-        
-        // Hiển thị module dựa trên URL hash khi tải trang
         window.addEventListener('DOMContentLoaded', () => {
-             const currentHash = window.location.hash || '#learning-room';
-             showModule(currentHash);
-        });
-        
-        // Thay đổi module khi click link
-        navLinks.forEach(link => {
-            link.addEventListener('click', (e) => {
-                e.preventDefault();
-                const targetHash = e.currentTarget.hash;
-                window.location.hash = targetHash; // Cập nhật URL
-                showModule(targetHash);
-            });
-        });
-
-        // --- LOGIC CỦA AI (CHO MODULE 'learning-room') ---
-        const promptInput = document.getElementById('promptInput');
-        const sendPromptButton = document.getElementById('sendPromptButton');
-        const buttonText = document.getElementById('buttonText');
-        const buttonSpinner = document.getElementById('buttonSpinner');
-        const responseContainer = document.getElementById('responseContainer');
-
-        let model;
-        try {
-            const ai = getAI(app, { backend: new GoogleAIBackend() });
-            model = getGenerativeModel(ai, { model: "gemini-1.5-flash-latest" });
-            console.log("Generative Model instance created!");
-        } catch (e) {
-            console.error("Lỗi khi khởi tạo AI Model:", e);
-            responseContainer.textContent = `Lỗi khởi tạo AI Model: ${e.message}.`;
-        }
-        
-        async function callGeminiAPI() {
-            if (!model) {
-                responseContainer.textContent = "Mô hình AI chưa được khởi tạo.";
-                return;
-            }
-
-            const promptText = promptInput.value.trim();
-            if (!promptText) {
-                responseContainer.textContent = "Vui lòng nhập câu hỏi của bạn.";
-                return;
-            }
-
-            // Cập nhật giao diện khi đang tải
-            responseContainer.innerHTML = '<div class="large-spinner"></div>';
-            buttonText.textContent = 'Đang xử lý';
-            buttonSpinner.style.display = 'block';
-            sendPromptButton.disabled = true;
-
+            // --- 1. INITIALIZE FIREBASE & AI MODEL ---
+            const firebaseConfig = {
+                apiKey: "AIzaSyAP6gEJJrq0YE0lzYT-EeuskY0C1XHP9wo",
+                authDomain: "bawithai.firebaseapp.com",
+                projectId: "bawithai",
+                storageBucket: "bawithai.appspot.com",
+                messagingSenderId: "75283657811",
+                appId: "1:75283657811:web:9c5c3e778396b9a340c2a6"
+            };
+            const app = initializeApp(firebaseConfig);
+            let geminiModel;
             try {
-                // Thêm vai trò cho AI để có câu trả lời tốt hơn
-                const structuredPrompt = `Bạn là một giáo viên chuyên ngành Business Analytics, thân thiện và có khả năng giải thích các khái niệm phức tạp một cách đơn giản. Hãy trả lời câu hỏi sau của sinh viên: "${promptText}"`;
-                
-                const result = await model.generateContent(structuredPrompt);
-                const response = result.response;
-                const text = response.text();
-                
-                responseContainer.innerText = text;
+                const ai = getAI(app, { backend: new GoogleAIBackend() });
+                geminiModel = getGenerativeModel(ai, { model: "gemini-1.5-flash-latest" });
+            } catch (e) { console.error("Error initializing AI Model:", e); }
 
-            } catch (error) {
-                console.error("Lỗi khi gọi Gemini API:", error);
-                responseContainer.innerText = `Lỗi: ${error.message}. Vui lòng kiểm tra Console (F12) để biết thêm chi tiết.`;
-            } finally {
-                // Khôi phục trạng thái nút
-                buttonText.textContent = 'Hỏi Gemini';
-                buttonSpinner.style.display = 'none';
-                sendPromptButton.disabled = false;
+            // --- 2. SETUP NAVIGATION ---
+            const navLinks = document.querySelectorAll('.nav-link');
+            const moduleContents = document.querySelectorAll('.module-content');
+            function showModule(hash) {
+                const targetId = hash.substring(1);
+                navLinks.forEach(link => link.classList.toggle('active', link.hash === hash));
+                moduleContents.forEach(content => content.classList.toggle('active', content.id === targetId));
             }
-        }
+            navLinks.forEach(link => {
+                link.addEventListener('click', (e) => { e.preventDefault(); window.history.pushState(null, '', e.currentTarget.hash); showModule(e.currentTarget.hash); });
+            });
+            window.addEventListener('popstate', () => { showModule(window.location.hash || '#learning-room'); });
+            showModule(window.location.hash || '#learning-room');
 
-        if (sendPromptButton) {
-            sendPromptButton.addEventListener("click", callGeminiAPI);
-        }
+            // --- 3. "BA LEARNING ROOM" LOGIC ---
+            const learningPromptInput = document.getElementById('learning-prompt-input');
+            const learningSendButton = document.getElementById('learning-send-button');
+            const learningResponseContainer = document.getElementById('learning-response-container');
+            learningSendButton.addEventListener("click", async () => {
+                if (!geminiModel || !learningPromptInput.value.trim()) return;
+                learningResponseContainer.innerHTML = '<div class="large-spinner"></div>';
+                learningSendButton.disabled = true;
+                try {
+                    const result = await geminiModel.generateContent(`Bạn là một giáo viên chuyên ngành Business Analytics. Hãy trả lời câu hỏi sau: "${learningPromptInput.value.trim()}"`);
+                    learningResponseContainer.innerText = result.response.text();
+                } catch (error) { learningResponseContainer.innerText = `Lỗi: ${error.message}`; } finally { learningSendButton.disabled = false; }
+            });
+
+            // --- 4. "AI CASE TRAINER" LOGIC ---
+            const fileInput = document.getElementById('fileInput');
+            const fileUploadText = document.getElementById('file-upload-text');
+            const analyzeFileButton = document.getElementById('analyzeFileButton');
+            const fileUploadSection = document.getElementById('file-upload-section');
+            const caseTrainerChatSection = document.getElementById('case-trainer-chat-section');
+            const caseTrainerChatHistory = document.getElementById('case-trainer-chat-history');
+            const caseTrainerChatForm = document.getElementById('case-trainer-chat-form');
+            const caseTrainerChatInput = document.getElementById('case-trainer-chat-input');
+            let dataForAnalysisContext = null;
+            let analysisDataType = null;
+
+            document.querySelector('#case-trainer .file-upload-wrapper').addEventListener('click', () => fileInput.click());
+            
+            fileInput.addEventListener('change', (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+                fileUploadText.textContent = `Đang xử lý file: ${file.name}...`;
+                analyzeFileButton.disabled = true;
+                const reader = new FileReader();
+                const fileExtension = file.name.split('.').pop().toLowerCase();
+                reader.onload = async (e) => {
+                    const fileContent = e.target.result;
+                    if (fileExtension === 'csv') {
+                        dataForAnalysisContext = fileContent;
+                        analysisDataType = 'table';
+                    } else if (['xlsx', 'xls'].includes(fileExtension)) {
+                        try {
+                            const workbook = XLSX.read(fileContent, {type: 'array'});
+                            dataForAnalysisContext = XLSX.utils.sheet_to_csv(workbook.Sheets[workbook.SheetNames[0]]);
+                            analysisDataType = 'table';
+                        } catch (err) { dataForAnalysisContext = null; }
+                    } else if (fileExtension === 'pdf') {
+                        try {
+                            const pdf = await pdfjsLib.getDocument(new Uint8Array(fileContent)).promise; let fullText = '';
+                            for (let i = 1; i <= pdf.numPages; i++) { const page = await pdf.getPage(i); const textContent = await page.getTextContent(); fullText += textContent.items.map(item => item.str).join(' ') + '\n'; }
+                            dataForAnalysisContext = fullText; analysisDataType = 'document';
+                        } catch (err) { dataForAnalysisContext = null; }
+                    } else if (fileExtension === 'docx') {
+                        try {
+                            const result = await mammoth.extractRawText({ arrayBuffer: fileContent });
+                            dataForAnalysisContext = result.value; analysisDataType = 'document';
+                        } catch (err) { dataForAnalysisContext = null; }
+                    }
+                    if (dataForAnalysisContext) { fileUploadText.textContent = `Sẵn sàng phân tích: ${file.name}`; analyzeFileButton.disabled = false; }
+                    else { fileUploadText.textContent = `Lỗi: Không thể xử lý file.`; }
+                };
+                if (['csv'].includes(fileExtension)) reader.readAsText(file); else reader.readAsArrayBuffer(file);
+            });
+
+            analyzeFileButton.addEventListener('click', async () => {
+                if (!dataForAnalysisContext || !geminiModel) return;
+                fileUploadSection.style.display = 'none';
+                caseTrainerChatSection.style.display = 'block';
+                addCaseTrainerMessage('ai', '<div class="large-spinner"></div>');
+                let initialPrompt;
+                if (analysisDataType === 'table') {
+                    initialPrompt = `Bạn là một chuyên gia Phân tích Dữ liệu. Dựa trên dữ liệu dạng bảng sau, hãy: 1. Phân tích sơ bộ. 2. Nêu các cột chính. 3. Đề xuất 3 câu hỏi kinh doanh thú vị để bắt đầu. Dữ liệu: \n---${dataForAnalysisContext}\n---`;
+                } else {
+                    initialPrompt = `Bạn là một chuyên gia Phân tích Kinh doanh. Dựa trên tài liệu sau, hãy: 1. Tóm tắt nội dung chính. 2. Trích xuất các số liệu quan trọng nhất. 3. Đề xuất 3 câu hỏi kinh doanh thú vị. Nội dung: \n---${dataForAnalysisContext}\n---`;
+                }
+                try {
+                    const result = await geminiModel.generateContent(initialPrompt);
+                    updateLastCaseTrainerMessage(result.response.text());
+                } catch (error) { updateLastCaseTrainerMessage(`Lỗi: ${error.message}`); }
+            });
+
+            caseTrainerChatForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const userQuery = caseTrainerChatInput.value.trim();
+                if (!userQuery || !geminiModel) return;
+                addCaseTrainerMessage('user', userQuery);
+                caseTrainerChatInput.value = '';
+                addCaseTrainerMessage('ai', '<div class="large-spinner"></div>');
+                let followUpPrompt;
+                if (analysisDataType === 'table') {
+                    followUpPrompt = `Trong vai một chuyên gia phân tích dữ liệu, hãy trả lời câu hỏi sau: "${userQuery}" dựa trên dữ liệu gốc này: \n---${dataForAnalysisContext}\n---`;
+                } else {
+                    followUpPrompt = `Trong vai một chuyên gia phân tích kinh doanh, hãy trả lời câu hỏi sau: "${userQuery}" dựa trên nội dung tài liệu gốc này: \n---${dataForAnalysisContext}\n---`;
+                }
+                try {
+                    const result = await geminiModel.generateContent(followUpPrompt);
+                    updateLastCaseTrainerMessage(result.response.text());
+                } catch (error) { updateLastCaseTrainerMessage(`Lỗi: ${error.message}`); }
+            });
+
+            function addCaseTrainerMessage(sender, text) {
+                const messageDiv = document.createElement('div');
+                messageDiv.classList.add('chat-message', sender === 'user' ? 'user-message' : 'ai-message');
+                messageDiv.innerHTML = text;
+                caseTrainerChatHistory.appendChild(messageDiv);
+                caseTrainerChatHistory.scrollTop = caseTrainerChatHistory.scrollHeight;
+            }
+            function updateLastCaseTrainerMessage(text) {
+                const lastMessage = caseTrainerChatHistory.querySelector('.ai-message:last-child');
+                if (lastMessage) lastMessage.innerHTML = text;
+            }
+
+
+            // --- 5. "MOCK INTERVIEW" LOGIC ---
+            const interviewSetupSection = document.getElementById('interview-setup-section');
+            const interviewChatSection = document.getElementById('interview-chat-section');
+            const startInterviewButton = document.getElementById('startInterviewButton');
+            const languageBtnGroup = document.getElementById('language-btn-group');
+            const topicBtnGroup = document.getElementById('topic-btn-group');
+            const interviewChatHistory = document.getElementById('interview-chat-history');
+            const interviewChatForm = document.getElementById('interview-chat-input-form');
+            const interviewChatInput = document.getElementById('interview-chat-input');
+            let selectedLanguage = 'vietnamese', selectedTopic = null, interviewConversationHistory = [], speech = window.speechSynthesis;
+
+            const checkSelections = () => { if(startInterviewButton) startInterviewButton.disabled = !(selectedLanguage && selectedTopic); };
+            
+            languageBtnGroup.addEventListener('click', (e) => { if (e.target.classList.contains('language-btn')) { languageBtnGroup.querySelector('.selected')?.classList.remove('selected'); e.target.classList.add('selected'); selectedLanguage = e.target.dataset.lang; checkSelections(); } });
+            topicBtnGroup.addEventListener('click', (e) => { if (e.target.classList.contains('topic-btn')) { topicBtnGroup.querySelector('.selected')?.classList.remove('selected'); e.target.classList.add('selected'); selectedTopic = e.target.dataset.topic; checkSelections(); } });
+            
+            startInterviewButton.addEventListener('click', async () => {
+                if (!selectedTopic || !selectedLanguage || !geminiModel) return;
+                interviewSetupSection.style.display = 'none';
+                interviewChatSection.style.display = 'block';
+                addInterviewMessage('ai', '<div class="large-spinner"></div>');
+                const initialPrompt = `You are an experienced hiring manager. **You must conduct the entire interview in ${selectedLanguage}.** Start by introducing yourself in ${selectedLanguage}. Then, ask the first question related to the topic: "${selectedTopic}". Ask only one question at a time.`;
+                try {
+                    const result = await geminiModel.generateContent(initialPrompt);
+                    const initialResponse = result.response.text();
+                    interviewConversationHistory = [ { role: 'user', parts: [{ text: initialPrompt }] }, { role: 'model', parts: [{ text: initialResponse }] } ];
+                    updateLastInterviewMessage(initialResponse, selectedLanguage);
+                } catch (error) { updateLastInterviewMessage(`Lỗi: ${error.message}`, selectedLanguage); }
+            });
+
+            interviewChatForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const userResponse = interviewChatInput.value.trim();
+                if (!userResponse || !geminiModel) return;
+                addInterviewMessage('user', userResponse);
+                interviewChatInput.value = '';
+                addInterviewMessage('ai', '<div class="large-spinner"></div>');
+                interviewConversationHistory.push({ role: 'user', parts: [{ text: userResponse }] });
+                const followUpPrompt = `Based on the candidate's previous answer, ask the next relevant question in ${selectedLanguage}. If the candidate says "tôi muốn nhận xét" or "I'd like feedback now", provide a constructive evaluation in ${selectedLanguage}.`;
+                try {
+                    const chat = geminiModel.startChat({ history: interviewConversationHistory });
+                    const result = await chat.sendMessage(followUpPrompt);
+                    const followUpResponse = result.response.text();
+                    interviewConversationHistory.push({ role: 'model', parts: [{ text: followUpResponse }] });
+                    updateLastInterviewMessage(followUpResponse, selectedLanguage);
+                } catch (error) { updateLastInterviewMessage(`Lỗi: ${error.message}`, selectedLanguage); }
+            });
+
+            function speakText(text, lang) {
+                if (!speech || !text) return;
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = lang === 'vietnamese' ? 'vi-VN' : 'en-US';
+                speech.cancel();
+                speech.speak(utterance);
+            }
+
+            function addInterviewMessage(sender, text) {
+                const messageDiv = document.createElement('div');
+                messageDiv.classList.add('chat-message', sender === 'user' ? 'user-message' : 'ai-message');
+                const textSpan = document.createElement('span');
+                textSpan.classList.add('message-text');
+                textSpan.innerHTML = text;
+                messageDiv.appendChild(textSpan);
+                if (sender === 'ai' && text.indexOf('spinner') === -1) { // Don't add button to spinner
+                    const speakBtn = document.createElement('button');
+                    speakBtn.classList.add('speak-btn');
+                    speakBtn.innerHTML = '<i class="fa-solid fa-volume-high"></i>';
+                    speakBtn.onclick = () => speakText(textSpan.innerText, selectedLanguage);
+                    messageDiv.appendChild(speakBtn);
+                }
+                interviewChatHistory.appendChild(messageDiv);
+                interviewChatHistory.scrollTop = interviewChatHistory.scrollHeight;
+            }
+
+            function updateLastInterviewMessage(text, lang) {
+                const lastMessage = interviewChatHistory.querySelector('.ai-message:last-child');
+                if (lastMessage) {
+                    const textSpan = lastMessage.querySelector('.message-text');
+                    textSpan.innerText = text;
+                    if (!lastMessage.querySelector('.speak-btn')) { // Add button if it doesn't exist
+                        const speakBtn = document.createElement('button');
+                        speakBtn.classList.add('speak-btn');
+                        speakBtn.innerHTML = '<i class="fa-solid fa-volume-high"></i>';
+                        lastMessage.appendChild(speakBtn);
+                    }
+                    lastMessage.querySelector('.speak-btn').onclick = () => speakText(text, lang);
+                    speakText(text, lang);
+                }
+            }
+        });
     </script>
 </body>
 </html>
