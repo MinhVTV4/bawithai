@@ -78,9 +78,7 @@
         .ai-message { background-color: var(--ai-message-bg); border: 1px solid #e2e8f0; align-self: flex-start; }
         .chat-message .message-text { word-wrap: break-word; min-height: 1.5em; width: 100%;}
         
-        .message-text h1, .message-text h2, .message-text h3, .message-text h4 {
-            margin-top: 1.2em; margin-bottom: 0.6em; font-weight: 600; line-height: 1.2; color: var(--sidebar-bg);
-        }
+        .message-text h1, .message-text h2, .message-text h3, .message-text h4 { margin-top: 1.2em; margin-bottom: 0.6em; font-weight: 600; line-height: 1.2; color: var(--sidebar-bg); }
         .message-text h1 { font-size: 1.5rem; }
         .message-text h2 { font-size: 1.25rem; }
         .message-text h3 { font-size: 1.1rem; }
@@ -110,6 +108,34 @@
         .btn-group button { background-color: var(--btn-secondary-bg); color: var(--text-dark); }
         .btn-group button.selected { background-color: var(--accent-color); color: white; }
         .speak-btn { background: none; border: none; color: #64748b; cursor: pointer; padding: 0 5px; font-size: 1rem; }
+        
+        .suggestions-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            padding: 10px 0;
+            border-top: 1px solid #e2e8f0;
+            margin-top: -15px;
+            margin-bottom: 15px;
+            padding-top: 15px;
+        }
+        .suggestion-btn {
+            background-color: #eef2ff;
+            color: #4f46e5;
+            border: 1px solid #c7d2fe;
+            padding: 8px 16px;
+            font-size: 0.875rem;
+            border-radius: 16px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .suggestion-btn:hover {
+            background-color: #c7d2fe;
+            color: #1e1b4b;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+        }
+        
         @keyframes spin { 100% { transform: rotate(360deg); } }
     </style>
 </head>
@@ -270,7 +296,7 @@
             const textSpan = document.createElement('span');
             textSpan.className = 'message-text';
             if (isHTML) {
-                textSpan.innerHTML = marked.parse(text);
+                textSpan.innerHTML = window.marked.parse(text);
             } else {
                 textSpan.textContent = text;
             }
@@ -283,6 +309,16 @@
         function renderChart(canvasId, chartData) {
             const ctx = document.getElementById(canvasId);
             if (!ctx) return;
+
+            // FIX: Handle deprecated 'horizontalBar' type from Chart.js v2
+            if (chartData.type === 'horizontalBar') {
+                chartData.type = 'bar';
+                if (!chartData.options) {
+                    chartData.options = {};
+                }
+                chartData.options.indexAxis = 'y';
+            }
+
             const existingChart = Chart.getChart(ctx);
             if (existingChart) existingChart.destroy();
             new Chart(ctx, chartData);
@@ -291,12 +327,19 @@
         async function processAndDisplayMessage(messageContainer, fullResponseText) {
             const textEl = messageContainer.querySelector('.message-text');
             const chartRegex = /<chart>([\s\S]*?)<\/chart>/;
-            const match = fullResponseText.match(chartRegex);
+            const suggestionsRegex = /<suggestions>([\s\S]*?)<\/suggestions>/;
 
-            if (match && match[1]) {
-                const chartJsonString = match[1].trim();
-                const textContent = fullResponseText.replace(chartRegex, '').trim();
-                textEl.innerHTML = marked.parse(textContent);
+            let textContent = fullResponseText;
+            const chartMatch = textContent.match(chartRegex);
+            const suggestionsMatch = textContent.match(suggestionsRegex);
+
+            if(chartMatch) textContent = textContent.replace(chartRegex, '').trim();
+            if(suggestionsMatch) textContent = textContent.replace(suggestionsRegex, '').trim();
+            
+            textEl.innerHTML = window.marked.parse(textContent);
+
+            if (chartMatch && chartMatch[1]) {
+                const chartJsonString = chartMatch[1].trim();
                 try {
                     const chartData = JSON.parse(chartJsonString);
                     const chartId = 'chart-' + Date.now() + Math.random();
@@ -313,8 +356,13 @@
                     console.error("Original AI-generated string that FAILED to parse:", chartJsonString);
                     textEl.innerHTML += "\n<p><em>Lỗi: Không thể hiển thị biểu đồ do định dạng dữ liệu không hợp lệ.</em></p>";
                 }
+            }
+
+            if (suggestionsMatch && suggestionsMatch[1]) {
+                displaySuggestions(suggestionsMatch[1].trim());
             } else {
-                textEl.innerHTML = marked.parse(fullResponseText);
+                const suggestionsContainer = document.getElementById('case-trainer-suggestions');
+                if (suggestionsContainer) suggestionsContainer.innerHTML = '';
             }
         }
         
@@ -324,11 +372,32 @@
             const chatContainer = messageContainer.closest('.chat-history');
             for await (const chunk of resultStream) {
                 fullResponseText += chunk.text();
-                textEl.innerHTML = marked.parse(fullResponseText.replace(/<chart>[\s\S]*?<\/chart>/, ''));
-                if (chatContainer) chatContainer.scrollTop = chatContainer.scrollHeight;
+                let cleanText = fullResponseText.replace(/<chart>[\s\S]*?<\/chart>/, '').replace(/<suggestions>[\s\S]*?<\/suggestions>/, '');
+                textEl.innerHTML = window.marked.parse(cleanText);
             }
             await processAndDisplayMessage(messageContainer, fullResponseText);
             return fullResponseText;
+        }
+
+        function displaySuggestions(suggestionsText) {
+            const container = document.getElementById('case-trainer-suggestions');
+            const form = document.getElementById('case-trainer-chat-form');
+            const input = document.getElementById('case-trainer-chat-input');
+            if (!container || !form || !input) return;
+
+            container.innerHTML = '';
+            const suggestions = suggestionsText.split('\n').filter(s => s.trim() !== '');
+
+            suggestions.forEach(suggestion => {
+                const btn = document.createElement('button');
+                btn.className = 'suggestion-btn';
+                btn.textContent = suggestion;
+                btn.onclick = () => {
+                    input.value = suggestion;
+                    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+                };
+                container.appendChild(btn);
+            });
         }
         
         function setupNavigation() {
@@ -358,7 +427,10 @@
                 const data = doc.data();
                 history = getValidHistoryForChat((data && data.history) ? data.history : []);
                 if (history.length > 0) {
-                    history.forEach(msg => addMessage(historyEl, msg.role === 'user' ? 'user' : 'model', msg.parts[0].text, true));
+                    history.forEach(msg => {
+                        const msgContainer = addMessage(historyEl, msg.role === 'user' ? 'user' : 'model', "", false);
+                        processAndDisplayMessage(msgContainer, msg.parts[0].text);
+                    });
                     chatSession = geminiModel.startChat({ history });
                 } else {
                      const aiMsgContainer = addMessage(historyEl, 'ai', "", true);
@@ -405,13 +477,16 @@
 
             const unsub = onSnapshot(doc(db, "users", currentUser.uid, "chats", moduleId), (docSnapshot) => {
                 historyEl.innerHTML = '';
+                const suggestionsContainer = document.getElementById('case-trainer-suggestions');
+                if(suggestionsContainer) suggestionsContainer.innerHTML = '';
+
                 const data = docSnapshot.data();
                 history = getValidHistoryForChat((data && data.history) ? data.history : []);
                 if (history.length > 0) {
                     history.forEach(msg => {
                         const msgText = msg.parts[0].text;
                         if (msg.role !== 'user' || !msgText.startsWith('You are a helpful Business Analyst assistant.')) {
-                           const msgContainer = addMessage(historyEl, msg.role === 'user' ? 'user' : 'model', "", true);
+                           const msgContainer = addMessage(historyEl, msg.role === 'user' ? 'user' : 'model', "", false);
                            processAndDisplayMessage(msgContainer, msgText);
                         }
                     });
@@ -438,7 +513,7 @@
                 if (!file || !geminiModel) return;
                 uploadSection.style.display = 'none';
                 chatSection.style.display = 'block';
-                const aiMessageContainer = addMessage(historyEl, 'ai', 'Đang xử lý file và phân tích...', true);
+                const aiMessageContainer = addMessage(historyEl, 'ai', '<div class="large-spinner"></div>', true);
                 const reader = new FileReader();
                 reader.onload = async (e) => {
                     let dataContext = '';
@@ -467,8 +542,7 @@
                         aiMessageContainer.querySelector('.message-text').innerHTML = `Lỗi khi đọc file: ${err.message}`; return;
                     }
                     if (!dataContext) { aiMessageContainer.querySelector('.message-text').innerHTML = "Lỗi: Không thể đọc file hoặc định dạng không được hỗ trợ."; return; }
-                    // FIX: Updated prompt to forbid functions
-                    const initialPrompt = `You are a helpful Business Analyst assistant.\nThe user has uploaded the following data from one or more spreadsheet sheets:\n---DATA---\n${dataContext}\n---END DATA---\nFirst, provide a brief summary of all the data, key observations, and suggest 3 open-ended questions for discussion.\n\nIMPORTANT: When the user asks you to create a chart (e.g., "draw a bar chart", "vẽ biểu đồ tròn"), you MUST respond with a **strictly valid, data-only JSON object** for Chart.js enclosed in <chart> tags.\nThe JSON must NOT contain any JavaScript, including function declarations, comments, or trailing commas. All property keys must be in double quotes. For example:\n<chart>\n{\n  "type": "bar",\n  "data": {\n    "labels": ["Tháng 1", "Tháng 2", "Tháng 3"],\n    "datasets": [{\n      "label": "Doanh thu",\n      "data": [120, 190, 300],\n      "backgroundColor": "rgba(54, 162, 235, 0.6)"\n    }]\n  },\n  "options": {}\n}\n</chart>\n\nOnly generate the <chart> block when a visualization is explicitly requested. Now, begin with the data summary.`;
+                    const initialPrompt = `You are a helpful Business Analyst assistant.\nThe user has uploaded the following data from one or more spreadsheet sheets:\n---DATA---\n${dataContext}\n---END DATA---\nFirst, provide a brief summary of all the data, key observations, and suggest 3 open-ended questions for discussion.\n\nAfter your summary and questions, generate a list of 3-4 specific, actionable follow-up analysis suggestions based on the provided data columns. Enclose this list within <suggestions> XML tags. Each suggestion must be on a new line.\nExample:\n<suggestions>\nPhân tích doanh thu theo từng sản phẩm.\nVẽ biểu đồ so sánh chi phí bán hàng và chi phí quản lý.\nTìm ra tháng có lợi nhuận cao nhất.\n</suggestions>\n\nIMPORTANT: When the user asks you to create a chart (e.g., "draw a bar chart", "vẽ biểu đồ tròn"), you MUST respond with a **strictly valid, data-only JSON object** for Chart.js (version 3+) enclosed in <chart> tags.\nThe JSON must NOT contain any JavaScript functions, comments, or trailing commas. All property keys must be in double quotes. For a horizontal bar chart, use \`type: 'bar'\` and set \`options: { indexAxis: 'y' }\`, do NOT use "horizontalBar".\n\nNow, begin with the data summary.`;
                     chatSession = geminiModel.startChat();
                     const result = await chatSession.sendMessageStream(initialPrompt);
                     const fullResponseText = await streamResponseToElement(aiMessageContainer, result.stream);
@@ -483,6 +557,9 @@
                 e.preventDefault();
                 const userQuery = inputEl.value.trim();
                 if (!userQuery || !chatSession) return;
+                
+                document.getElementById('case-trainer-suggestions').innerHTML = '';
+                
                 history.push({ role: 'user', parts: [{ text: userQuery }] });
                 addMessage(historyEl, 'user', userQuery, false);
                 inputEl.value = '';
@@ -600,7 +677,6 @@
                 if (!messageDiv || messageDiv.querySelector('.speak-btn')) return;
                 const speakBtn = document.createElement('button');
                 speakBtn.className = 'speak-btn';
-                speakBtn.innerHTML = '<i class="fa-solid fa-volume-high"></i>';
                 speakBtn.onclick = (e) => {
                     e.stopPropagation();
                     speakText(messageDiv.querySelector('.message-text').innerText, lang);
@@ -629,7 +705,11 @@
                  <div class="module-header-wrapper"><h1 class="module-header">AI Case Trainer</h1><button id="clear-case-trainer-history" class="btn-icon btn-danger" title="Bắt đầu lại"><i class="fa-solid fa-trash-can"></i></button></div>
                  <p class="module-subheader">Tải lên file dữ liệu và yêu cầu AI phân tích hoặc vẽ biểu đồ.</p>
                  <div id="file-upload-section" class="controls-box"><label for="fileInput" class="file-upload-wrapper"><i class="fa-solid fa-cloud-arrow-up fa-2x"></i> <br><span id="file-upload-text">Nhấp để chọn file CSV, Excel, PDF hoặc DOCX</span></label><input type="file" id="fileInput" accept=".csv, .xlsx, .xls, .pdf, .docx" style="display: none;"><button id="analyzeFileButton" disabled style="margin-top: 20px; width: 100%;"><span>Bắt đầu Phân tích</span></button></div>
-                 <div id="case-trainer-chat-section" class="chat-container" style="display: none;"><div class="chat-history" id="case-trainer-chat-history"></div><form id="case-trainer-chat-form" class="chat-input-form"><input type="text" id="case-trainer-chat-input" placeholder="Đặt câu hỏi hoặc yêu cầu vẽ biểu đồ..." autocomplete="off"><button type="submit">Gửi</button></form></div>
+                 <div id="case-trainer-chat-section" class="chat-container" style="display: none;">
+                    <div class="chat-history" id="case-trainer-chat-history"></div>
+                    <div id="case-trainer-suggestions" class="suggestions-container"></div>
+                    <form id="case-trainer-chat-form" class="chat-input-form"><input type="text" id="case-trainer-chat-input" placeholder="Đặt câu hỏi hoặc yêu cầu vẽ biểu đồ..." autocomplete="off"><button type="submit">Gửi</button></form>
+                 </div>
             </div>
             <div id="mock-interview" class="module-content">
                 <div class="module-header-wrapper"><h1 class="module-header">Mock Interview</h1><button id="clear-mock-interview-history" class="btn-icon btn-danger" title="Bắt đầu lại"><i class="fa-solid fa-trash-can"></i></button></div>
