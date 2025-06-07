@@ -310,7 +310,6 @@
             const ctx = document.getElementById(canvasId);
             if (!ctx) return;
 
-            // FIX: Handle deprecated 'horizontalBar' type from Chart.js v2
             if (chartData.type === 'horizontalBar') {
                 chartData.type = 'bar';
                 if (!chartData.options) {
@@ -472,8 +471,18 @@
             const fileInput = document.getElementById('fileInput');
             const fileUploadText = document.getElementById('file-upload-text');
             const analyzeBtn = document.getElementById('analyzeFileButton');
+            const langGroup = document.getElementById('case-trainer-language-btn-group');
             let history = [];
             let chatSession = null;
+            let selectedLanguage = 'vietnamese'; // Default language
+
+            langGroup.addEventListener('click', (e) => {
+                if (e.target.classList.contains('language-btn')) {
+                    langGroup.querySelector('.selected')?.classList.remove('selected');
+                    e.target.classList.add('selected');
+                    selectedLanguage = e.target.dataset.lang;
+                }
+            });
 
             const unsub = onSnapshot(doc(db, "users", currentUser.uid, "chats", moduleId), (docSnapshot) => {
                 historyEl.innerHTML = '';
@@ -542,7 +551,7 @@
                         aiMessageContainer.querySelector('.message-text').innerHTML = `Lỗi khi đọc file: ${err.message}`; return;
                     }
                     if (!dataContext) { aiMessageContainer.querySelector('.message-text').innerHTML = "Lỗi: Không thể đọc file hoặc định dạng không được hỗ trợ."; return; }
-                    const initialPrompt = `You are a helpful Business Analyst assistant.\nThe user has uploaded the following data from one or more spreadsheet sheets:\n---DATA---\n${dataContext}\n---END DATA---\nFirst, provide a brief summary of all the data, key observations, and suggest 3 open-ended questions for discussion.\n\nAfter your summary and questions, generate a list of 3-4 specific, actionable follow-up analysis suggestions based on the provided data columns. Enclose this list within <suggestions> XML tags. Each suggestion must be on a new line.\nExample:\n<suggestions>\nPhân tích doanh thu theo từng sản phẩm.\nVẽ biểu đồ so sánh chi phí bán hàng và chi phí quản lý.\nTìm ra tháng có lợi nhuận cao nhất.\n</suggestions>\n\nIMPORTANT: When the user asks you to create a chart (e.g., "draw a bar chart", "vẽ biểu đồ tròn"), you MUST respond with a **strictly valid, data-only JSON object** for Chart.js (version 3+) enclosed in <chart> tags.\nThe JSON must NOT contain any JavaScript functions, comments, or trailing commas. All property keys must be in double quotes. For a horizontal bar chart, use \`type: 'bar'\` and set \`options: { indexAxis: 'y' }\`, do NOT use "horizontalBar".\n\nNow, begin with the data summary.`;
+                    const initialPrompt = `You are a helpful Business Analyst assistant. Your response language MUST be ${selectedLanguage}.\nThe user has uploaded the following data from one or more spreadsheet sheets:\n---DATA---\n${dataContext}\n---END DATA---\nFirst, provide a brief summary of all the data, key observations, and suggest 3 open-ended questions for discussion. The entire response, including the summary and questions, MUST be in ${selectedLanguage}.\n\nAfter your summary and questions, generate a list of 3-4 specific, actionable follow-up analysis suggestions based on the provided data columns. Enclose this list within <suggestions> XML tags. Each suggestion must be on a new line and MUST be in ${selectedLanguage}.\nExample (if language is vietnamese):\n<suggestions>\nPhân tích doanh thu theo từng sản phẩm.\nVẽ biểu đồ so sánh chi phí bán hàng và chi phí quản lý.\nTìm ra tháng có lợi nhuận cao nhất.\n</suggestions>\n\nIMPORTANT: When the user asks you to create a chart (e.g., "draw a bar chart", "vẽ biểu đồ tròn"), you MUST respond with a **strictly valid, data-only JSON object** for Chart.js (version 3+) enclosed in <chart> tags.\nThe JSON must NOT contain any JavaScript functions, comments, or trailing commas. All property keys must be in double quotes. For a horizontal bar chart, use \`type: 'bar'\` and set \`options: { indexAxis: 'y' }\`, do NOT use "horizontalBar".\n\nNow, begin with the data summary in ${selectedLanguage}.`;
                     chatSession = geminiModel.startChat();
                     const result = await chatSession.sendMessageStream(initialPrompt);
                     const fullResponseText = await streamResponseToElement(aiMessageContainer, result.stream);
@@ -704,7 +713,18 @@
             <div id="case-trainer" class="module-content">
                  <div class="module-header-wrapper"><h1 class="module-header">AI Case Trainer</h1><button id="clear-case-trainer-history" class="btn-icon btn-danger" title="Bắt đầu lại"><i class="fa-solid fa-trash-can"></i></button></div>
                  <p class="module-subheader">Tải lên file dữ liệu và yêu cầu AI phân tích hoặc vẽ biểu đồ.</p>
-                 <div id="file-upload-section" class="controls-box"><label for="fileInput" class="file-upload-wrapper"><i class="fa-solid fa-cloud-arrow-up fa-2x"></i> <br><span id="file-upload-text">Nhấp để chọn file CSV, Excel, PDF hoặc DOCX</span></label><input type="file" id="fileInput" accept=".csv, .xlsx, .xls, .pdf, .docx" style="display: none;"><button id="analyzeFileButton" disabled style="margin-top: 20px; width: 100%;"><span>Bắt đầu Phân tích</span></button></div>
+                 <div id="file-upload-section" class="controls-box">
+                    <div class="setup-group">
+                        <span class="setup-label">Chọn ngôn ngữ phân tích:</span>
+                        <div id="case-trainer-language-btn-group" class="btn-group">
+                            <button class="language-btn selected" data-lang="vietnamese">Tiếng Việt</button>
+                            <button class="language-btn" data-lang="english">English</button>
+                        </div>
+                    </div>
+                    <label for="fileInput" class="file-upload-wrapper"><i class="fa-solid fa-cloud-arrow-up fa-2x"></i> <br><span id="file-upload-text">Nhấp để chọn file CSV, Excel, PDF hoặc DOCX</span></label>
+                    <input type="file" id="fileInput" accept=".csv, .xlsx, .xls, .pdf, .docx" style="display: none;">
+                    <button id="analyzeFileButton" disabled style="margin-top: 20px; width: 100%;"><span>Bắt đầu Phân tích</span></button>
+                 </div>
                  <div id="case-trainer-chat-section" class="chat-container" style="display: none;">
                     <div class="chat-history" id="case-trainer-chat-history"></div>
                     <div id="case-trainer-suggestions" class="suggestions-container"></div>
@@ -720,4 +740,4 @@
         }
     </script>
 </body>
-</html>
+</ht
