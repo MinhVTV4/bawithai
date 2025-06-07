@@ -369,18 +369,19 @@
             if (chartMatch && chartMatch[1]) {
                 const chartJsonString = chartMatch[1].trim();
                 try {
-                    const chartData = JSON.parse(chartJsonString);
+                    // FIX: Remove callback functions before parsing
+                    const sanitizedJson = chartJsonString.replace(/"callback":\s*function\s*\([\s\S]*?\)\s*\{[\s\S]*?\}/g, '"callback":null');
+                    const chartData = JSON.parse(sanitizedJson);
+                    const canvas = document.createElement('canvas');
                     let chartContainerDiv = messageContainer.querySelector('.chart-container');
                     if (!chartContainerDiv) {
                         chartContainerDiv = document.createElement('div');
                         chartContainerDiv.className = 'chart-container';
                         messageContainer.appendChild(chartContainerDiv);
                     }
-                    const canvas = document.createElement('canvas');
-                    chartContainerDiv.innerHTML = '';
+                    chartContainerDiv.innerHTML = ''; 
                     chartContainerDiv.appendChild(canvas);
-                    // FIX: Use setTimeout to ensure the canvas is rendered before Chart.js tries to use it.
-                    setTimeout(() => renderChart(canvas, chartData), 0);
+                    renderChart(canvas, chartData);
                 } catch (e) {
                     console.error("Error parsing or rendering chart JSON:", e);
                     console.error("Original AI-generated string that FAILED to parse:", chartJsonString);
