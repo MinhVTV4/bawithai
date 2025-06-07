@@ -13,7 +13,6 @@
     <!-- Thư viện Marked.js để xử lý Markdown -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script>
-        // Required setup for PDF.js
         pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
     </script>
     <style>
@@ -31,29 +30,39 @@
             --danger-hover: #dc2626;
         }
         body { font-family: 'Inter', sans-serif; margin: 0; background-color: var(--main-bg); color: var(--text-dark); display: flex; height: 100vh; overflow: hidden; }
-        #sidebar { width: 250px; background-color: var(--sidebar-bg); color: var(--text-light); padding: 20px 0; display: flex; flex-direction: column; flex-shrink: 0; }
+        
+        /* --- Auth Container --- */
+        #auth-container { display: flex; justify-content: center; align-items: center; width: 100vw; height: 100vh; background-color: var(--main-bg); position: fixed; top: 0; left: 0; z-index: 100; }
+        .auth-box { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); width: 100%; max-width: 400px; text-align: center; }
+        .auth-box h2 { margin-bottom: 25px; color: var(--sidebar-bg); }
+        .auth-form input { width: 100%; padding: 12px; margin-bottom: 15px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 1rem; box-sizing: border-box; }
+        .auth-form button { width: 100%; padding: 12px; margin-bottom: 15px; }
+        .auth-error { color: var(--danger-color); margin-bottom: 15px; min-height: 1.2em; text-align: left; }
+        .auth-toggle-link { color: var(--accent-color); cursor: pointer; text-decoration: none; }
+        .auth-toggle-link:hover { text-decoration: underline; }
+
+        /* --- Main App Layout --- */
+        #app-container { display: none; flex-direction: row; width: 100%; height: 100vh; }
+        #sidebar { width: 260px; background-color: var(--sidebar-bg); color: var(--text-light); padding: 20px 0; display: flex; flex-direction: column; flex-shrink: 0; }
         #sidebar-header { padding: 0 20px 20px 20px; font-size: 1.5rem; font-weight: bold; display: flex; align-items: center; gap: 10px; }
         .nav-list { list-style: none; padding: 0; margin: 0; flex-grow: 1; }
         .nav-item a { display: flex; align-items: center; gap: 15px; padding: 15px 20px; color: var(--text-light); text-decoration: none; font-size: 1rem; transition: background-color 0.2s, border-left 0.2s; border-left: 4px solid transparent; }
         .nav-item a:hover { background-color: #334155; }
         .nav-item a.active { background-color: #475569; border-left: 4px solid var(--accent-color); font-weight: 600; }
         .nav-icon { width: 20px; text-align: center; }
+        #sidebar-footer { padding: 20px; border-top: 1px solid #334155; }
+        #user-info { font-size: 0.875rem; word-break: break-all; margin-bottom: 10px; }
+        #logout-button { background: none; border: none; color: var(--text-light); font-size: 1rem; cursor: pointer; display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 0; font-weight: 600; }
+        #logout-button:hover { color: var(--danger-color); }
+        
         #main-content { flex-grow: 1; padding: 30px; overflow-y: auto; }
         .module-content { display: none; }
         .module-content.active { display: block; }
         .module-header-wrapper { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
         .module-header { font-size: 2rem; font-weight: bold; color: var(--sidebar-bg); margin: 0; }
         .module-subheader { font-size: 1rem; color: #64748b; margin-bottom: 30px; }
-        .controls-box, .chat-container, .response-box { width: 100%; max-width: 800px; background-color: #fff; padding: 25px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.05); }
-        .markdown-content h1, .markdown-content h2, .markdown-content h3 { color: var(--sidebar-bg); margin-top: 1.5em; margin-bottom: 0.5em;}
-        .markdown-content p { margin-bottom: 1em; }
-        .markdown-content ul, .markdown-content ol { padding-left: 20px; }
-        .markdown-content code { background-color: #e2e8f0; padding: 2px 4px; border-radius: 4px; font-family: 'Courier New', Courier, monospace; }
-        .markdown-content pre { background-color: #e2e8f0; padding: 15px; border-radius: 8px; overflow-x: auto; }
-        .markdown-content table { border-collapse: collapse; width: 100%; margin: 1em 0; }
-        .markdown-content th, .markdown-content td { border: 1px solid #cbd5e1; padding: 8px; text-align: left; }
-        .markdown-content th { background-color: #f1f5f9; }
-
+        .controls-box, .chat-container { width: 100%; max-width: 800px; background-color: #fff; padding: 25px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.05); }
+        
         button { padding: 10px 20px; background-color: var(--accent-color); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 1rem; transition: background-color 0.3s ease; display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-weight: 600; }
         button:hover { background-color: var(--accent-hover); }
         button:disabled { background-color: #93c5fd; cursor: not-allowed; }
@@ -66,10 +75,8 @@
         .user-message { background-color: var(--user-message-bg); align-self: flex-end; margin-left: auto; }
         .ai-message { background-color: var(--ai-message-bg); border: 1px solid #e2e8f0; align-self: flex-start; }
         .chat-message .message-text { flex-grow: 1; word-wrap: break-word; min-height: 1.5em; }
-        .chat-message .message-text * { margin: 0; }
-
-        .speak-btn { background: none; border: none; color: #64748b; cursor: pointer; padding: 0 5px; font-size: 1rem; opacity: 0.7; transition: opacity 0.2s; }
-        .speak-btn:hover { opacity: 1; color: var(--accent-color); }
+        
+        .speak-btn { background: none; border: none; color: #64748b; cursor: pointer; padding: 0 5px; font-size: 1rem; }
         .chat-input-form { display: flex; gap: 10px; }
         .chat-input-form input { flex-grow: 1; padding: 12px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 16px; }
         .large-spinner { width: 40px; height: 40px; border: 5px solid #e2e8f0; border-radius: 50%; border-top-color: var(--accent-color); margin: auto; animation: spin 1s linear infinite; }
@@ -80,435 +87,485 @@
         .btn-group button.selected { background-color: var(--accent-color); color: white; }
         .file-upload-wrapper { cursor: pointer; border: 2px dashed #cbd5e1; padding: 30px; text-align: center; border-radius: 8px; transition: background-color 0.2s; display: block;}
         .file-upload-wrapper:hover { background-color: #f8fafc;}
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
-    <aside id="sidebar">
-        <div id="sidebar-header"><i class="fa-solid fa-brain"></i><span>BA Studio</span></div>
-        <ul class="nav-list">
-            <li class="nav-item"><a href="#learning-room" class="nav-link"><i class="fa-solid fa-book-open nav-icon"></i> <span>BA Learning Room</span></a></li>
-            <li class="nav-item"><a href="#case-trainer" class="nav-link"><i class="fa-solid fa-chart-simple nav-icon"></i> <span>AI Case Trainer</span></a></li>
-            <li class="nav-item"><a href="#mock-interview" class="nav-link"><i class="fa-solid fa-microphone nav-icon"></i> <span>Mock Interview</span></a></li>
-        </ul>
-    </aside>
 
-    <main id="main-content">
-        <!-- Module 1: BA Learning Room -->
-        <div id="learning-room" class="module-content">
-             <div class="module-header-wrapper">
-                <h1 class="module-header">BA Learning Room</h1>
-                <button id="clear-learning-history" class="btn-icon btn-danger" title="Bắt đầu lại"><i class="fa-solid fa-trash-can"></i></button>
-             </div>
-             <p class="module-subheader">Trò chuyện với trợ lý AI để tìm hiểu sâu về các khái niệm Business Analytics.</p>
-             <div class="chat-container">
-                <div class="chat-history" id="learning-chat-history">
-                    <!-- Chat history will be loaded here -->
-                </div>
-                <form id="learning-chat-form" class="chat-input-form">
-                    <input type="text" id="learning-chat-input" placeholder="Ví dụ: Giải thích về A/B Testing..." autocomplete="off">
-                    <button type="submit">Gửi</button>
-                </form>
-             </div>
+    <!-- Authentication Screen -->
+    <div id="auth-container">
+        <div class="auth-box">
+            <form id="login-form" class="auth-form">
+                <h2>Đăng nhập BA Studio</h2>
+                <div id="login-error" class="auth-error"></div>
+                <input type="email" id="login-email" placeholder="Email" required>
+                <input type="password" id="login-password" placeholder="Mật khẩu" required>
+                <button type="submit">Đăng nhập</button>
+                <p>Chưa có tài khoản? <a href="#" id="show-signup" class="auth-toggle-link">Đăng ký ngay</a></p>
+            </form>
+            <form id="signup-form" class="auth-form" style="display: none;">
+                <h2>Tạo tài khoản</h2>
+                <div id="signup-error" class="auth-error"></div>
+                <input type="email" id="signup-email" placeholder="Email" required>
+                <input type="password" id="signup-password" placeholder="Mật khẩu (ít nhất 6 ký tự)" required>
+                <button type="submit">Đăng ký</button>
+                <p>Đã có tài khoản? <a href="#" id="show-login" class="auth-toggle-link">Đăng nhập</a></p>
+            </form>
         </div>
+    </div>
 
-        <!-- Module 2: AI Case Trainer -->
-        <div id="case-trainer" class="module-content">
-             <div class="module-header-wrapper">
-                 <h1 class="module-header">AI Case Trainer</h1>
-                 <button id="clear-case-trainer-history" class="btn-icon btn-danger" title="Bắt đầu lại"><i class="fa-solid fa-trash-can"></i></button>
-             </div>
-             <p class="module-subheader">Bắt đầu một phiên phân tích bằng cách tải lên file dữ liệu.</p>
-             <div id="file-upload-section" class="controls-box">
-                <label for="fileInput" class="file-upload-wrapper"><i class="fa-solid fa-cloud-arrow-up"></i> <span id="file-upload-text">Nhấp để chọn file CSV, Excel, PDF hoặc DOCX</span></label>
-                <input type="file" id="fileInput" accept=".csv, .xlsx, .xls, .pdf, .docx" style="display: none;">
-                <button id="analyzeFileButton" disabled><span>Bắt đầu Phân tích Mới</span></button>
-             </div>
-             <div id="case-trainer-chat-section" class="chat-container" style="display: none;">
-                <div class="chat-history" id="case-trainer-chat-history"></div>
-                <form id="case-trainer-chat-form" class="chat-input-form">
-                    <input type="text" id="case-trainer-chat-input" placeholder="Đặt câu hỏi về tài liệu của bạn..." autocomplete="off">
-                    <button type="submit">Gửi</button>
-                </form>
-             </div>
-        </div>
-        
-        <!-- Module 3: Mock Interview -->
-        <div id="mock-interview" class="module-content">
-            <div class="module-header-wrapper">
-                 <h1 class="module-header">Mock Interview</h1>
-                 <button id="clear-interview-history" class="btn-icon btn-danger" title="Bắt đầu lại"><i class="fa-solid fa-trash-can"></i></button>
+    <!-- Main Application -->
+    <div id="app-container">
+        <aside id="sidebar">
+            <div id="sidebar-header"><i class="fa-solid fa-brain"></i><span>BA Studio</span></div>
+            <ul class="nav-list">
+                <li class="nav-item"><a href="#learning-room" class="nav-link"><i class="fa-solid fa-book-open nav-icon"></i> <span>BA Learning Room</span></a></li>
+                <li class="nav-item"><a href="#case-trainer" class="nav-link"><i class="fa-solid fa-chart-simple nav-icon"></i> <span>AI Case Trainer</span></a></li>
+                <li class="nav-item"><a href="#mock-interview" class="nav-link"><i class="fa-solid fa-microphone nav-icon"></i> <span>Mock Interview</span></a></li>
+            </ul>
+            <div id="sidebar-footer">
+                <div id="user-info"></div>
+                <button id="logout-button"><i class="fa-solid fa-right-from-bracket"></i> Đăng xuất</button>
             </div>
-             <p class="module-subheader">Luyện tập phỏng vấn với nhà tuyển dụng AI.</p>
-             <div id="interview-setup-section" class="controls-box">
-                <div class="setup-group"><span class="setup-label">1. Chọn ngôn ngữ:</span><div id="language-btn-group" class="btn-group"><button class="language-btn selected" data-lang="vietnamese">Tiếng Việt</button><button class="language-btn" data-lang="english">English</button></div></div>
-                <div class="setup-group"><span class="setup-label">2. Chọn chủ đề:</span><div id="topic-btn-group" class="btn-group"><button class="topic-btn" data-topic="Business Case">Tình huống Kinh doanh</button><button class="topic-btn" data-topic="SQL">Kiến thức SQL</button><button class="topic-btn" data-topic="Storytelling">Kể chuyện bằng Dữ liệu</button></div></div>
-                <button id="startInterviewButton" disabled>Bắt đầu Phỏng vấn</button>
-             </div>
-             <div id="interview-chat-section" class="chat-container" style="display: none;">
-                <div class="chat-history" id="interview-chat-history"></div>
-                <form id="interview-chat-input-form" class="chat-input-form"><input type="text" id="interview-chat-input" placeholder="Nhập câu trả lời của bạn..." autocomplete="off"><button type="submit">Gửi</button></form>
-             </div>
-        </div>
-    </main>
+        </aside>
+        <main id="main-content"></main>
+    </div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.0/firebase-app.js";
-        import { getAI, getGenerativeModel, GoogleAIBackend } from "https://www.gstatic.com/firebasejs/11.9.0/firebase-ai.js";
+        import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/11.9.0/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot, updateDoc } from "https://www.gstatic.com/firebasejs/11.9.0/firebase-firestore.js";
+        import { getAI, getGenerativeModel } from "https://www.gstatic.com/firebasejs/11.9.0/firebase-ai.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyAP6gEJJrq0YE0lzYT-EeuskY0C1XHP9wo",
+            authDomain: "bawithai.firebaseapp.com",
+            projectId: "bawithai",
+            storageBucket: "bawithai.appspot.com",
+            messagingSenderId: "75283657811",
+            appId: "1:75283657811:web:9c5c3e778396b9a340c2a6"
+        };
         
-        window.addEventListener('DOMContentLoaded', () => {
-            // --- 1. INITIALIZE FIREBASE & AI MODEL ---
-            const firebaseConfig = {
-                apiKey: "AIzaSyAP6gEJJrq0YE0lzYT-EeuskY0C1XHP9wo",
-                authDomain: "bawithai.firebaseapp.com",
-                projectId: "bawithai",
-                storageBucket: "bawithai.appspot.com",
-                messagingSenderId: "75283657811",
-                appId: "1:75283657811:web:9c5c3e778396b9a340c2a6"
-            };
-            const app = initializeApp(firebaseConfig);
-            let geminiModel;
-            try {
-                const ai = getAI(app, { backend: new GoogleAIBackend() });
-                geminiModel = getGenerativeModel(ai, { model: "gemini-1.5-flash-latest" });
-            } catch (e) { console.error("Error initializing AI Model:", e); }
+        // --- 1. INITIALIZE SERVICES ---
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        let geminiModel;
+        try {
+            geminiModel = getGenerativeModel(getAI(app), { model: "gemini-1.5-flash-latest" });
+        } catch(e) {
+            console.error("Could not initialize AI Model", e);
+        }
 
-            // --- 2. SETUP NAVIGATION ---
-            const navLinks = document.querySelectorAll('.nav-link');
-            const moduleContents = document.querySelectorAll('.module-content');
-            function showModule(hash) {
-                const targetId = hash.substring(1);
-                navLinks.forEach(link => link.classList.toggle('active', link.hash === hash));
-                moduleContents.forEach(content => content.classList.toggle('active', content.id === targetId));
+        // --- 2. DOM ELEMENTS & STATE ---
+        const authContainer = document.getElementById('auth-container');
+        const appContainer = document.getElementById('app-container');
+        const mainContent = document.getElementById('main-content');
+        let currentUser = null;
+        let unsubscribeListeners = [];
+
+        // --- 3. AUTHENTICATION LOGIC ---
+        onAuthStateChanged(auth, user => {
+            if (user) {
+                currentUser = user;
+                authContainer.style.display = 'none';
+                appContainer.style.display = 'flex';
+                document.getElementById('user-info').textContent = `Chào, ${user.email}`;
+                initializeAllModules();
+            } else {
+                currentUser = null;
+                authContainer.style.display = 'flex';
+                appContainer.style.display = 'none';
+                cleanupOnLogout();
             }
-            navLinks.forEach(link => {
-                link.addEventListener('click', (e) => { e.preventDefault(); window.history.pushState(null, '', e.currentTarget.hash); showModule(e.currentTarget.hash); });
+        });
+        
+        document.getElementById('login-form').addEventListener('submit', e => {
+            e.preventDefault();
+            const email = document.getElementById('login-email').value;
+            const password = document.getElementById('login-password').value;
+            const errorDiv = document.getElementById('login-error');
+            errorDiv.textContent = '';
+            signInWithEmailAndPassword(auth, email, password)
+                .catch(error => { errorDiv.textContent = "Email hoặc mật khẩu không đúng."; });
+        });
+        
+        document.getElementById('signup-form').addEventListener('submit', e => {
+            e.preventDefault();
+            const email = document.getElementById('signup-email').value;
+            const password = document.getElementById('signup-password').value;
+            const errorDiv = document.getElementById('signup-error');
+            errorDiv.textContent = '';
+            createUserWithEmailAndPassword(auth, email, password)
+                .catch(error => {
+                    if (error.code === 'auth/email-already-in-use') errorDiv.textContent = "Email này đã được sử dụng.";
+                    else if (error.code === 'auth/weak-password') errorDiv.textContent = "Mật khẩu quá yếu (ít nhất 6 ký tự).";
+                    else errorDiv.textContent = "Đã xảy ra lỗi khi đăng ký.";
+                });
+        });
+
+        document.getElementById('logout-button').addEventListener('click', () => signOut(auth));
+        
+        document.getElementById('show-signup').addEventListener('click', e => { e.preventDefault(); document.getElementById('login-form').style.display = 'none'; document.getElementById('signup-form').style.display = 'block'; });
+        document.getElementById('show-login').addEventListener('click', e => { e.preventDefault(); document.getElementById('login-form').style.display = 'block'; document.getElementById('signup-form').style.display = 'none'; });
+
+        // --- 4. APP INITIALIZATION & CLEANUP ---
+        function initializeAllModules() {
+            mainContent.innerHTML = getModulesHTML();
+            setupNavigation();
+            setupLearningRoom();
+            setupCaseTrainer();
+            setupMockInterview();
+            showModule(window.location.hash || '#learning-room');
+        }
+        
+        function cleanupOnLogout() {
+            unsubscribeListeners.forEach(unsub => unsub());
+            unsubscribeListeners = [];
+            mainContent.innerHTML = '';
+        }
+
+        // --- 5. FIRESTORE & HELPER FUNCTIONS ---
+        async function saveData(moduleId, dataToSave) {
+            if (!currentUser) return;
+            const docRef = doc(db, 'users', currentUser.uid, 'chats', moduleId);
+            await setDoc(docRef, dataToSave, { merge: true });
+        }
+
+        async function streamResponseToElement(element, resultStream) {
+            let fullResponseText = "";
+            const chatContainer = element.closest('.chat-history');
+            for await (const chunk of resultStream) {
+                fullResponseText += chunk.text();
+                element.innerHTML = marked.parse(fullResponseText);
+                if (chatContainer) chatContainer.scrollTop = chatContainer.scrollHeight;
+            }
+            return fullResponseText;
+        }
+
+        function addMessage(historyEl, sender, text, isHTML = false) {
+            if (!historyEl) return null;
+            const senderClass = sender === 'user' ? 'user-message' : 'ai-message';
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `chat-message ${senderClass}`;
+            const textSpan = document.createElement('span');
+            textSpan.className = 'message-text';
+            if (isHTML) textSpan.innerHTML = text; else textSpan.textContent = text;
+            messageDiv.appendChild(textSpan);
+            historyEl.appendChild(messageDiv);
+            historyEl.scrollTop = historyEl.scrollHeight;
+            return textSpan;
+        }
+        
+        // --- 6. NAVIGATION ---
+        function setupNavigation() {
+            document.querySelectorAll('.nav-link').forEach(link => {
+                link.addEventListener('click', e => { e.preventDefault(); window.history.pushState(null, '', e.currentTarget.hash); showModule(e.currentTarget.hash); });
             });
-            window.addEventListener('popstate', () => { showModule(window.location.hash || '#learning-room'); });
+            window.addEventListener('popstate', () => showModule(window.location.hash || '#learning-room'));
+        }
+
+        function showModule(hash) {
+            const targetId = hash.substring(1);
+            document.querySelectorAll('.nav-link').forEach(l => l.classList.toggle('active', l.hash === hash));
+            document.querySelectorAll('.module-content').forEach(c => c.classList.toggle('active', c.id === targetId));
+        }
+
+        // --- 7. MODULE SETUP ---
+        function setupLearningRoom() {
+            const moduleId = 'learning-room';
+            const historyEl = document.getElementById(`${moduleId}-chat-history`);
+            const form = document.getElementById(`${moduleId}-chat-form`);
+            const input = document.getElementById(`${moduleId}-chat-input`);
+            const clearBtn = document.getElementById(`clear-${moduleId}-history`);
             
-            // --- GENERIC HELPER FUNCTIONS ---
-            async function streamResponseToElement(element, resultStream) {
-                let fullResponseText = "";
-                for await (const chunk of resultStream) {
-                    fullResponseText += chunk.text();
-                    element.innerHTML = marked.parse(fullResponseText);
-                    const chatContainer = element.closest('.chat-history');
-                    if (chatContainer) chatContainer.scrollTop = chatContainer.scrollHeight;
-                }
-                return fullResponseText;
-            }
+            let history = [];
+            let chatSession = null;
 
-            function saveToLocalStorage(key, data) {
-                localStorage.setItem(key, JSON.stringify(data));
-            }
-
-            function loadFromLocalStorage(key) {
-                const data = localStorage.getItem(key);
-                return data ? JSON.parse(data) : null;
-            }
-
-            // --- 3. "BA LEARNING ROOM" LOGIC ---
-            const learningChatHistoryEl = document.getElementById('learning-chat-history');
-            const learningChatForm = document.getElementById('learning-chat-form');
-            const learningChatInput = document.getElementById('learning-chat-input');
-            const clearLearningHistoryBtn = document.getElementById('clear-learning-history');
-            let learningHistory = [];
-            let learningChatSession = null;
-
-            function addLearningMessage(sender, text, isHTML = false) {
-                const messageDiv = document.createElement('div');
-                messageDiv.classList.add('chat-message', sender === 'user' ? 'user-message' : 'ai-message');
-                const textSpan = document.createElement('span');
-                textSpan.classList.add('message-text');
-                if (isHTML) {
-                    textSpan.innerHTML = text;
+            const unsub = onSnapshot(doc(db, "users", currentUser.uid, "chats", moduleId), (doc) => {
+                historyEl.innerHTML = '';
+                const data = doc.data();
+                history = (data && data.history) ? data.history : [];
+                if (history.length > 0) {
+                    history.forEach(msg => addMessage(historyEl, msg.role === 'user' ? 'user' : 'model', msg.parts[0].text, true));
+                    chatSession = geminiModel.startChat({ history });
                 } else {
-                    textSpan.textContent = text;
+                     addMessage(historyEl, 'ai', "Xin chào! Tôi là trợ lý học tập BA của bạn. Bạn muốn hỏi về chủ đề gì hôm nay?");
                 }
-                messageDiv.appendChild(textSpan);
-                learningChatHistoryEl.appendChild(messageDiv);
-                learningChatHistoryEl.scrollTop = learningChatHistoryEl.scrollHeight;
-                return textSpan;
-            }
+            });
+            unsubscribeListeners.push(unsub);
             
-            function resetLearningSession() {
-                localStorage.removeItem('learningHistory');
-                learningHistory = [];
-                learningChatSession = null;
-                learningChatHistoryEl.innerHTML = '';
-                addLearningMessage('ai', "Xin chào! Tôi là trợ lý học tập BA của bạn. Bạn muốn hỏi về chủ đề gì hôm nay?", true);
-            }
-
-            function loadLearningHistory() {
-                learningHistory = loadFromLocalStorage('learningHistory') || [];
-                if (learningHistory.length === 0) {
-                    addLearningMessage('ai', "Xin chào! Tôi là trợ lý học tập BA của bạn. Bạn muốn hỏi về chủ đề gì hôm nay?", true);
-                } else {
-                    learningChatHistoryEl.innerHTML = '';
-                    learningHistory.forEach(msg => addLearningMessage(msg.role === 'user' ? 'user' : 'ai', msg.parts[0].text, true));
-                    learningChatSession = geminiModel.startChat({ history: learningHistory });
-                }
-            }
-            
-            learningChatForm.addEventListener('submit', async (e) => {
+            form.addEventListener('submit', async e => {
                 e.preventDefault();
-                const userQuery = learningChatInput.value.trim();
+                const userQuery = input.value.trim();
                 if (!userQuery || !geminiModel) return;
-
-                if (!learningChatSession) {
-                    learningChatSession = geminiModel.startChat();
-                }
-
-                addLearningMessage('user', userQuery);
-                learningHistory.push({ role: 'user', parts: [{ text: userQuery }] });
-
-                learningChatInput.value = '';
-                const aiMessageElement = addLearningMessage('ai', '<div class="large-spinner"></div>', true);
                 
-                try {
-                    aiMessageElement.innerHTML = '';
-                    const result = await learningChatSession.sendMessageStream(userQuery);
-                    const fullResponseText = await streamResponseToElement(aiMessageElement, result.stream);
-                    learningHistory.push({ role: 'model', parts: [{ text: fullResponseText }] });
-                    saveToLocalStorage('learningHistory', learningHistory);
-                } catch (error) {
-                    aiMessageElement.innerHTML = `<p><b>Lỗi:</b> ${error.message}</p>`;
-                }
+                if (!chatSession) chatSession = geminiModel.startChat({ history });
+
+                const userMessage = { role: 'user', parts: [{ text: userQuery }] };
+                history.push(userMessage);
+                addMessage(historyEl, 'user', userQuery);
+                input.value = '';
+
+                const aiMessageEl = addMessage(historyEl, 'ai', '<div class="large-spinner"></div>', true);
+                
+                const result = await chatSession.sendMessageStream(userQuery);
+                const fullResponse = await streamResponseToElement(aiMessageEl, result.stream);
+    
+                const modelMessage = { role: 'model', parts: [{ text: fullResponse }] };
+                history.push(modelMessage);
+                await saveData(moduleId, { history });
             });
 
-            clearLearningHistoryBtn.addEventListener('click', resetLearningSession);
-
-
-            // --- 4. "AI CASE TRAINER" LOGIC ---
+            clearBtn.addEventListener('click', () => {
+                if (confirm("Bạn có chắc muốn xóa cuộc trò chuyện này không?")) {
+                    history = [];
+                    chatSession = null;
+                    saveData(moduleId, { history: [] });
+                }
+            });
+        }
+        
+        function setupCaseTrainer() {
+            const moduleId = 'case-trainer';
+            const historyEl = document.getElementById(`${moduleId}-chat-history`);
+            const form = document.getElementById(`${moduleId}-chat-form`);
+            const inputEl = document.getElementById(`${moduleId}-chat-input`);
+            const clearBtn = document.getElementById(`clear-${moduleId}-history`);
+            const uploadSection = document.getElementById('file-upload-section');
+            const chatSection = document.getElementById(`${moduleId}-chat-section`);
             const fileInput = document.getElementById('fileInput');
             const fileUploadText = document.getElementById('file-upload-text');
-            const analyzeFileButton = document.getElementById('analyzeFileButton');
-            const fileUploadSection = document.getElementById('file-upload-section');
-            const caseTrainerChatSection = document.getElementById('case-trainer-chat-section');
-            const caseTrainerChatHistoryEl = document.getElementById('case-trainer-chat-history');
-            const caseTrainerChatForm = document.getElementById('case-trainer-chat-form');
-            const caseTrainerChatInput = document.getElementById('case-trainer-chat-input');
-            const clearCaseTrainerHistoryBtn = document.getElementById('clear-case-trainer-history');
-            let caseTrainerHistory = [];
-            let caseTrainerChatSession = null;
+            const analyzeBtn = document.getElementById('analyzeFileButton');
 
-            function addCaseTrainerMessage(sender, text, isHTML = false) {
-                const messageDiv = document.createElement('div');
-                messageDiv.classList.add('chat-message', sender === 'user' ? 'user-message' : 'ai-message');
-                const textSpan = document.createElement('span');
-                textSpan.classList.add('message-text');
-                if (isHTML) {
-                    textSpan.innerHTML = text;
-                } else {
-                    textSpan.textContent = text;
-                }
-                messageDiv.appendChild(textSpan);
-                caseTrainerChatHistoryEl.appendChild(messageDiv);
-                caseTrainerChatHistoryEl.scrollTop = caseTrainerChatHistoryEl.scrollHeight;
-                return textSpan;
-            }
-            
-            function resetCaseTrainerSession() {
-                localStorage.removeItem('caseTrainerHistory');
-                caseTrainerHistory = [];
-                caseTrainerChatSession = null;
-                caseTrainerChatHistoryEl.innerHTML = '';
-                fileInput.value = ''; // Clear file input
-                
-                fileUploadText.textContent = 'Nhấp để chọn file CSV, Excel, PDF hoặc DOCX';
-                analyzeFileButton.disabled = true;
+            let history = [];
+            let chatSession = null;
 
-                caseTrainerChatSection.style.display = 'none';
-                fileUploadSection.style.display = 'block';
-            }
-
-            function loadCaseTrainerSession() {
-                const savedHistory = loadFromLocalStorage('caseTrainerHistory');
-                if (savedHistory && savedHistory.length > 0) {
-                    caseTrainerHistory = savedHistory;
-                    caseTrainerChatHistoryEl.innerHTML = '';
-                    caseTrainerHistory.forEach(msg => {
-                        // Don't display the initial long system prompt
+            const unsub = onSnapshot(doc(db, "users", currentUser.uid, "chats", moduleId), (doc) => {
+                historyEl.innerHTML = '';
+                const data = doc.data();
+                history = (data && data.history) ? data.history : [];
+                if (history.length > 0) {
+                    history.forEach(msg => {
+                        // Don't show the very long initial system prompt to the user
                         if (msg.role !== 'user' || !msg.parts[0].text.startsWith('Phân tích tài liệu sau đây')) {
-                            addCaseTrainerMessage(msg.role === 'user' ? 'user' : 'ai', msg.parts[0].text, true);
+                           addMessage(historyEl, msg.role === 'user' ? 'user' : 'model', msg.parts[0].text, true);
                         }
                     });
-                    
-                    caseTrainerChatSession = geminiModel.startChat({ history: caseTrainerHistory });
-                    fileUploadSection.style.display = 'none';
-                    caseTrainerChatSection.style.display = 'block';
+                    chatSession = geminiModel.startChat({ history });
+                    uploadSection.style.display = 'none';
+                    chatSection.style.display = 'block';
+                } else {
+                    uploadSection.style.display = 'block';
+                    chatSection.style.display = 'none';
                 }
-            }
-
-            document.querySelector('#case-trainer .file-upload-wrapper').addEventListener('click', () => fileInput.click());
+            });
+            unsubscribeListeners.push(unsub);
             
+            document.querySelector('#case-trainer .file-upload-wrapper').addEventListener('click', () => fileInput.click());
+
             fileInput.addEventListener('change', (event) => {
                 const file = event.target.files[0];
                 if (!file) return;
-                analyzeFileButton.disabled = false;
-                fileUploadText.textContent = `Đã chọn file: ${file.name}. Nhấn nút để bắt đầu.`;
+                analyzeBtn.disabled = false;
+                fileUploadText.textContent = `Đã chọn file: ${file.name}.`;
             });
             
-            analyzeFileButton.addEventListener('click', async () => {
+            analyzeBtn.addEventListener('click', () => {
                 const file = fileInput.files[0];
                 if (!file || !geminiModel) return;
 
-                resetCaseTrainerSession(); // Clear previous session before starting a new one
-                
-                fileUploadSection.style.display = 'none';
-                caseTrainerChatSection.style.display = 'block';
-                const aiMessageElement = addCaseTrainerMessage('ai', 'Đang xử lý file và phân tích...', true);
+                uploadSection.style.display = 'none';
+                chatSection.style.display = 'block';
+                const aiMessageElement = addMessage(historyEl, 'ai', 'Đang xử lý file và phân tích...', true);
 
                 const reader = new FileReader();
-                const fileExtension = file.name.split('.').pop().toLowerCase();
-                
                 reader.onload = async (e) => {
-                    const fileContent = e.target.result;
-                    let dataContext = null;
-
+                    let dataContext = '';
                     try {
-                        if (fileExtension === 'csv') {
-                            dataContext = fileContent;
-                        } else if (['xlsx', 'xls'].includes(fileExtension)) {
+                        const fileContent = e.target.result;
+                        const fileExtension = file.name.split('.').pop().toLowerCase();
+                        if (fileExtension === 'csv') dataContext = fileContent;
+                        else if (['xlsx', 'xls'].includes(fileExtension)) {
                             const workbook = XLSX.read(fileContent, {type: 'array'});
                             dataContext = XLSX.utils.sheet_to_csv(workbook.Sheets[workbook.SheetNames[0]]);
                         } else if (fileExtension === 'pdf') {
-                            const pdf = await pdfjsLib.getDocument(new Uint8Array(fileContent)).promise; let fullText = '';
-                            for (let i = 1; i <= pdf.numPages; i++) { const page = await pdf.getPage(i); const textContent = await page.getTextContent(); fullText += textContent.items.map(item => item.str).join(' ') + '\n'; }
-                            dataContext = fullText;
+                            const pdf = await pdfjsLib.getDocument(new Uint8Array(fileContent)).promise;
+                            for (let i = 1; i <= pdf.numPages; i++) { const page = await pdf.getPage(i); const textContent = await page.getTextContent(); dataContext += textContent.items.map(item => item.str).join(' ') + '\n'; }
                         } else if (fileExtension === 'docx') {
                             const result = await mammoth.extractRawText({ arrayBuffer: fileContent });
                             dataContext = result.value;
                         }
-                    } catch (error) {
-                        aiMessageElement.innerHTML = `Lỗi khi đọc file: ${error.message}`;
-                        return;
+                    } catch (err) {
+                        aiMessageElement.innerHTML = `Lỗi khi đọc file: ${err.message}`; return;
                     }
-
-
-                    if(!dataContext) {
-                        aiMessageElement.innerHTML = "Lỗi: Không thể đọc file hoặc định dạng không được hỗ trợ.";
-                        return;
-                    }
+                    
+                    if (!dataContext) { aiMessageElement.innerHTML = "Lỗi: Không thể đọc file hoặc định dạng không được hỗ trợ."; return; }
 
                     const initialPrompt = `Phân tích tài liệu sau đây và đưa ra nhận xét sơ bộ, các điểm chính, và 3 câu hỏi gợi mở để thảo luận. Dữ liệu: \n---${dataContext}\n---`;
-                    
-                    try {
-                        aiMessageElement.innerHTML = '';
-                        caseTrainerChatSession = geminiModel.startChat();
-                        const result = await caseTrainerChatSession.sendMessageStream(initialPrompt);
-                        const fullResponseText = await streamResponseToElement(aiMessageElement, result.stream);
-
-                        caseTrainerHistory.push({ role: 'user', parts: [{ text: initialPrompt }] });
-                        caseTrainerHistory.push({ role: 'model', parts: [{ text: fullResponseText }] });
-                        saveToLocalStorage('caseTrainerHistory', caseTrainerHistory);
-
-                    } catch (error) { aiMessageElement.innerHTML = `<p><b>Lỗi:</b> ${error.message}</p>`; }
-                };
-
-                if (['csv'].includes(fileExtension)) reader.readAsText(file); else reader.readAsArrayBuffer(file);
-            });
-
-            caseTrainerChatForm.addEventListener('submit', async (e) => {
-                e.preventDefault();
-                const userQuery = caseTrainerChatInput.value.trim();
-                if (!userQuery || !geminiModel || !caseTrainerChatSession) return;
-                
-                addCaseTrainerMessage('user', userQuery);
-                caseTrainerHistory.push({ role: 'user', parts: [{ text: userQuery }] });
-                
-                caseTrainerChatInput.value = '';
-                const aiMessageElement = addCaseTrainerMessage('ai', '<div class="large-spinner"></div>', true);
-                
-                try {
-                    aiMessageElement.innerHTML = '';
-                    const result = await caseTrainerChatSession.sendMessageStream(userQuery);
+                    chatSession = geminiModel.startChat();
+                    const result = await chatSession.sendMessageStream(initialPrompt);
                     const fullResponseText = await streamResponseToElement(aiMessageElement, result.stream);
-                    
-                    caseTrainerHistory.push({ role: 'model', parts: [{ text: fullResponseText }] });
-                    saveToLocalStorage('caseTrainerHistory', caseTrainerHistory);
 
-                } catch (error) { aiMessageElement.innerHTML = `<p><b>Lỗi:</b> ${error.message}</p>`; }
+                    history = [
+                        { role: 'user', parts: [{ text: initialPrompt }] },
+                        { role: 'model', parts: [{ text: fullResponseText }] }
+                    ];
+                    await saveData(moduleId, { history });
+                };
+                if (['csv', 'txt'].includes(file.name.split('.').pop().toLowerCase())) reader.readAsText(file);
+                else reader.readAsArrayBuffer(file);
             });
-            
-            clearCaseTrainerHistoryBtn.addEventListener('click', resetCaseTrainerSession);
 
-
-            // --- 5. "MOCK INTERVIEW" LOGIC ---
-            const interviewSetupSection = document.getElementById('interview-setup-section');
-            const interviewChatSection = document.getElementById('interview-chat-section');
-            const startInterviewButton = document.getElementById('startInterviewButton');
-            const languageBtnGroup = document.getElementById('language-btn-group');
-            const topicBtnGroup = document.getElementById('topic-btn-group');
-            const interviewChatHistoryEl = document.getElementById('interview-chat-history');
-            const interviewChatForm = document.getElementById('interview-chat-input-form');
-            const interviewChatInput = document.getElementById('interview-chat-input');
-            const clearInterviewHistoryBtn = document.getElementById('clear-interview-history');
-            let selectedLanguage = 'vietnamese', selectedTopic = null, speech = window.speechSynthesis, interviewChatSession = null, interviewHistory = [];
-
-            function addInterviewMessage(sender, text, isHTML = false) {
-                const messageDiv = document.createElement('div');
-                messageDiv.classList.add('chat-message', sender === 'user' ? 'user-message' : 'ai-message');
-                const textSpan = document.createElement('span');
-                textSpan.classList.add('message-text');
-                if (isHTML) {
-                    textSpan.innerHTML = text;
-                } else {
-                    textSpan.textContent = text;
-                }
-                messageDiv.appendChild(textSpan);
-                interviewChatHistoryEl.appendChild(messageDiv);
-                interviewChatHistoryEl.scrollTop = interviewChatHistoryEl.scrollHeight;
-                return textSpan;
-            }
-            
-            function resetInterviewSession() {
-                localStorage.removeItem('interviewSession');
-                interviewHistory = [];
-                interviewChatSession = null;
-                interviewChatHistoryEl.innerHTML = '';
-                speech.cancel();
-
-                // Reset selections
-                topicBtnGroup.querySelector('.selected')?.classList.remove('selected');
-                selectedTopic = null;
-                checkSelections();
+            form.addEventListener('submit', async e => {
+                e.preventDefault();
+                const userQuery = inputEl.value.trim();
+                if (!userQuery || !chatSession) return;
                 
-                interviewChatSection.style.display = 'none';
-                interviewSetupSection.style.display = 'block';
-            }
+                addMessage(historyEl, 'user', userQuery);
+                const userMessage = { role: 'user', parts: [{ text: userQuery }] };
+                history.push(userMessage);
+                inputEl.value = '';
 
-            function loadInterviewSession() {
-                const savedSession = loadFromLocalStorage('interviewSession');
-                if(savedSession) {
-                    interviewHistory = savedSession.history;
-                    selectedLanguage = savedSession.language;
-                    selectedTopic = savedSession.topic;
+                const aiMessageEl = addMessage(historyEl, 'ai', '<div class="large-spinner"></div>', true);
+                const result = await chatSession.sendMessageStream(userQuery);
+                const fullResponseText = await streamResponseToElement(aiMessageEl, result.stream);
+                    
+                const modelMessage = { role: 'model', parts: [{ text: fullResponseText }] };
+                history.push(modelMessage);
+                await saveData(moduleId, { history });
+            });
 
-                    interviewChatHistoryEl.innerHTML = '';
-                    interviewHistory.forEach(msg => {
-                         // Don't display the initial long system prompt
+            clearBtn.addEventListener('click', () => {
+                if (confirm("Bạn có chắc muốn xóa phiên phân tích này không?")) {
+                    history = [];
+                    chatSession = null;
+                    fileInput.value = '';
+                    fileUploadText.textContent = 'Nhấp để chọn file CSV, Excel, PDF hoặc DOCX';
+                    analyzeBtn.disabled = true;
+                    saveData(moduleId, { history: [] });
+                }
+            });
+        }
+
+        function setupMockInterview() {
+            const moduleId = 'mock-interview';
+            const setupSection = document.getElementById('interview-setup-section');
+            const chatSection = document.getElementById('interview-chat-section');
+            const historyEl = document.getElementById(`${moduleId}-chat-history`);
+            const form = document.getElementById('interview-chat-input-form');
+            const inputEl = document.getElementById('interview-chat-input');
+            const clearBtn = document.getElementById(`clear-${moduleId}-history`);
+            const startBtn = document.getElementById('startInterviewButton');
+            const langGroup = document.getElementById('language-btn-group');
+            const topicGroup = document.getElementById('topic-btn-group');
+            
+            let sessionState = { history: [], language: 'vietnamese', topic: null, inProgress: false };
+            let chatSession = null;
+            const speech = window.speechSynthesis;
+
+            const unsub = onSnapshot(doc(db, "users", currentUser.uid, "chats", moduleId), (doc) => {
+                historyEl.innerHTML = '';
+                const data = doc.data();
+                sessionState = data ? { ...{history:[], inProgress: false}, ...data } : sessionState;
+                
+                if (sessionState.inProgress) {
+                    sessionState.history.forEach(msg => {
                         if (msg.role !== 'user' || !msg.parts[0].text.startsWith('You are an experienced hiring manager')) {
-                            const messageElement = addInterviewMessage(msg.role === 'user' ? 'user' : 'ai', msg.parts[0].text, true);
-                             if (msg.role !== 'user') {
-                                addSpeakButton(messageElement.parentElement, selectedLanguage);
-                            }
+                           const msgEl = addMessage(historyEl, msg.role === 'user' ? 'user' : 'model', msg.parts[0].text, true);
+                           if (msg.role === 'model') addSpeakButton(msgEl.parentElement, sessionState.language);
                         }
                     });
-                    
-                    interviewChatSession = geminiModel.startChat({ history: interviewHistory });
-                    interviewSetupSection.style.display = 'none';
-                    interviewChatSection.style.display = 'block';
+                    chatSession = geminiModel.startChat({ history: sessionState.history });
+                    setupSection.style.display = 'none';
+                    chatSection.style.display = 'block';
+                } else {
+                    setupSection.style.display = 'block';
+                    chatSection.style.display = 'none';
                 }
-            }
+            });
+            unsubscribeListeners.push(unsub);
+            
+            const checkSelections = () => { startBtn.disabled = !sessionState.topic; };
+            
+            langGroup.addEventListener('click', (e) => { 
+                if (e.target.classList.contains('language-btn')) { 
+                    langGroup.querySelector('.selected')?.classList.remove('selected'); 
+                    e.target.classList.add('selected'); 
+                    sessionState.language = e.target.dataset.lang; 
+                } 
+            });
+            topicGroup.addEventListener('click', (e) => { 
+                if (e.target.classList.contains('topic-btn')) { 
+                    topicGroup.querySelector('.selected')?.classList.remove('selected'); 
+                    e.target.classList.add('selected'); 
+                    sessionState.topic = e.target.dataset.topic; 
+                    checkSelections();
+                } 
+            });
+
+            startBtn.addEventListener('click', async () => {
+                if (startBtn.disabled) return;
+                
+                sessionState.inProgress = true;
+                setupSection.style.display = 'none';
+                chatSection.style.display = 'block';
+                const aiMessageElement = addMessage(historyEl, 'ai', '<div class="large-spinner"></div>', true);
+                
+                const initialPrompt = `You are an experienced hiring manager. You must conduct the entire interview in ${sessionState.language}. Start by introducing yourself in ${sessionState.language}. Then, ask the first question related to the topic: "${sessionState.topic}". Ask only one question at a time.`;
+                
+                chatSession = geminiModel.startChat();
+                const result = await chatSession.sendMessageStream(initialPrompt);
+                const fullResponseText = await streamResponseToElement(aiMessageElement, result.stream);
+                
+                sessionState.history = [
+                    { role: 'user', parts: [{ text: initialPrompt }] },
+                    { role: 'model', parts: [{ text: fullResponseText }] }
+                ];
+                await saveData(moduleId, sessionState);
+                
+                addSpeakButton(aiMessageElement.parentElement, sessionState.language);
+                speakText(fullResponseText, sessionState.language);
+            });
+
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const userResponse = inputEl.value.trim();
+                if (!userResponse || !chatSession) return;
+                
+                addMessage(historyEl, 'user', userResponse);
+                sessionState.history.push({ role: 'user', parts: [{ text: userResponse }] });
+                inputEl.value = '';
+
+                const aiMessageElement = addMessage(historyEl, 'ai', '<div class="large-spinner"></div>', true);
+                
+                const result = await chatSession.sendMessageStream(userResponse);
+                const fullResponseText = await streamResponseToElement(aiMessageElement, result.stream);
+                
+                sessionState.history.push({ role: 'model', parts: [{ text: fullResponseText }] });
+                await saveData(moduleId, sessionState);
+
+                addSpeakButton(aiMessageElement.parentElement, sessionState.language);
+                speakText(fullResponseText, sessionState.language);
+            });
+
+            clearBtn.addEventListener('click', () => {
+                if (confirm("Bạn có chắc muốn kết thúc buổi phỏng vấn này không?")) {
+                    sessionState = { history: [], language: 'vietnamese', topic: null, inProgress: false };
+                    chatSession = null;
+                    speech.cancel();
+                    topicGroup.querySelector('.selected')?.classList.remove('selected');
+                    startBtn.disabled = true;
+                    saveData(moduleId, sessionState);
+                }
+            });
 
             function addSpeakButton(messageDiv, lang) {
                 if (messageDiv.querySelector('.speak-btn')) return;
                 const speakBtn = document.createElement('button');
-                speakBtn.classList.add('speak-btn');
+                speakBtn.className = 'speak-btn';
                 speakBtn.innerHTML = '<i class="fa-solid fa-volume-high"></i>';
-                const textForSpeech = messageDiv.querySelector('.message-text').innerText;
-                speakBtn.onclick = () => speakText(textForSpeech, lang);
+                speakBtn.onclick = () => speakText(messageDiv.querySelector('.message-text').innerText, lang);
                 messageDiv.appendChild(speakBtn);
             }
             
@@ -519,68 +576,66 @@
                 speech.cancel();
                 speech.speak(utterance);
             }
+        }
 
-            const checkSelections = () => { if(startInterviewButton) startInterviewButton.disabled = !(selectedLanguage && selectedTopic); };
+        // --- 8. HTML TEMPLATES ---
+        function getModulesHTML() {
+            return `
+            <!-- Module 1: BA Learning Room -->
+            <div id="learning-room" class="module-content">
+                 <div class="module-header-wrapper">
+                    <h1 class="module-header">BA Learning Room</h1>
+                    <button id="clear-learning-room-history" class="btn-icon btn-danger" title="Bắt đầu lại"><i class="fa-solid fa-trash-can"></i></button>
+                 </div>
+                 <p class="module-subheader">Trò chuyện với trợ lý AI để tìm hiểu sâu về các khái niệm Business Analytics.</p>
+                 <div class="chat-container">
+                    <div class="chat-history" id="learning-room-chat-history"></div>
+                    <form id="learning-room-chat-form" class="chat-input-form">
+                        <input type="text" id="learning-room-chat-input" placeholder="Ví dụ: Giải thích về A/B Testing..." autocomplete="off">
+                        <button type="submit">Gửi</button>
+                    </form>
+                 </div>
+            </div>
+    
+            <!-- Module 2: AI Case Trainer -->
+            <div id="case-trainer" class="module-content">
+                 <div class="module-header-wrapper">
+                     <h1 class="module-header">AI Case Trainer</h1>
+                     <button id="clear-case-trainer-history" class="btn-icon btn-danger" title="Bắt đầu lại"><i class="fa-solid fa-trash-can"></i></button>
+                 </div>
+                 <p class="module-subheader">Bắt đầu một phiên phân tích bằng cách tải lên file dữ liệu.</p>
+                 <div id="file-upload-section" class="controls-box">
+                    <label for="fileInput" class="file-upload-wrapper"><i class="fa-solid fa-cloud-arrow-up fa-2x"></i> <br><span id="file-upload-text">Nhấp để chọn file CSV, Excel, PDF hoặc DOCX</span></label>
+                    <input type="file" id="fileInput" accept=".csv, .xlsx, .xls, .pdf, .docx" style="display: none;">
+                    <button id="analyzeFileButton" disabled style="margin-top: 20px; width: 100%;"><span>Bắt đầu Phân tích</span></button>
+                 </div>
+                 <div id="case-trainer-chat-section" class="chat-container" style="display: none;">
+                    <div class="chat-history" id="case-trainer-chat-history"></div>
+                    <form id="case-trainer-chat-form" class="chat-input-form">
+                        <input type="text" id="case-trainer-chat-input" placeholder="Đặt câu hỏi về tài liệu của bạn..." autocomplete="off">
+                        <button type="submit">Gửi</button>
+                    </form>
+                 </div>
+            </div>
             
-            languageBtnGroup.addEventListener('click', (e) => { if (e.target.classList.contains('language-btn')) { languageBtnGroup.querySelector('.selected')?.classList.remove('selected'); e.target.classList.add('selected'); selectedLanguage = e.target.dataset.lang; checkSelections(); } });
-            topicBtnGroup.addEventListener('click', (e) => { if (e.target.classList.contains('topic-btn')) { topicBtnGroup.querySelector('.selected')?.classList.remove('selected'); e.target.classList.add('selected'); selectedTopic = e.target.dataset.topic; checkSelections(); } });
-            
-            startInterviewButton.addEventListener('click', async () => {
-                if (!selectedTopic || !selectedLanguage || !geminiModel) return;
-                
-                resetInterviewSession();
-
-                interviewSetupSection.style.display = 'none';
-                interviewChatSection.style.display = 'block';
-                const aiMessageElement = addInterviewMessage('ai', '<div class="large-spinner"></div>', true);
-                const initialPrompt = `You are an experienced hiring manager. **You must conduct the entire interview in ${selectedLanguage}.** Start by introducing yourself in ${selectedLanguage}. Then, ask the first question related to the topic: "${selectedTopic}". Ask only one question at a time.`;
-                
-                try {
-                    interviewChatSession = geminiModel.startChat();
-                    const result = await interviewChatSession.sendMessageStream(initialPrompt);
-                    const fullResponseText = await streamResponseToElement(aiMessageElement, result.stream);
-                    
-                    interviewHistory.push({ role: 'user', parts: [{ text: initialPrompt }]});
-                    interviewHistory.push({ role: 'model', parts: [{ text: fullResponseText }]});
-                    saveToLocalStorage('interviewSession', { history: interviewHistory, language: selectedLanguage, topic: selectedTopic });
-                    
-                    addSpeakButton(aiMessageElement.parentElement, selectedLanguage);
-                    speakText(fullResponseText, selectedLanguage);
-
-                } catch (error) { aiMessageElement.innerHTML = `<p><b>Lỗi:</b> ${error.message}</p>`; }
-            });
-
-            interviewChatForm.addEventListener('submit', async (e) => {
-                e.preventDefault();
-                const userResponse = interviewChatInput.value.trim();
-                if (!userResponse || !geminiModel || !interviewChatSession) return;
-                
-                addInterviewMessage('user', userResponse);
-                interviewHistory.push({ role: 'user', parts: [{ text: userResponse }] });
-
-                interviewChatInput.value = '';
-                const aiMessageElement = addInterviewMessage('ai', '<div class="large-spinner"></div>', true);
-                
-                try {
-                    const result = await interviewChatSession.sendMessageStream(userResponse);
-                    const fullResponseText = await streamResponseToElement(aiMessageElement, result.stream);
-                    
-                    interviewHistory.push({ role: 'model', parts: [{ text: fullResponseText }] });
-                    saveToLocalStorage('interviewSession', { history: interviewHistory, language: selectedLanguage, topic: selectedTopic });
-
-                    addSpeakButton(aiMessageElement.parentElement, selectedLanguage);
-                    speakText(fullResponseText, selectedLanguage);
-                } catch (error) { aiMessageElement.innerHTML = `<p><b>Lỗi:</b> ${error.message}</p>`; }
-            });
-            
-            clearInterviewHistoryBtn.addEventListener('click', resetInterviewSession);
-            
-            // --- INITIALIZE APP STATE ---
-            loadLearningHistory();
-            loadCaseTrainerSession();
-            loadInterviewSession();
-            showModule(window.location.hash || '#learning-room');
-        });
+            <!-- Module 3: Mock Interview -->
+            <div id="mock-interview" class="module-content">
+                <div class="module-header-wrapper">
+                     <h1 class="module-header">Mock Interview</h1>
+                     <button id="clear-mock-interview-history" class="btn-icon btn-danger" title="Bắt đầu lại"><i class="fa-solid fa-trash-can"></i></button>
+                </div>
+                 <p class="module-subheader">Luyện tập phỏng vấn với nhà tuyển dụng AI.</p>
+                 <div id="interview-setup-section" class="controls-box">
+                    <div class="setup-group"><span class="setup-label">1. Chọn ngôn ngữ:</span><div id="language-btn-group" class="btn-group"><button class="language-btn selected" data-lang="vietnamese">Tiếng Việt</button><button class="language-btn" data-lang="english">English</button></div></div>
+                    <div class="setup-group"><span class="setup-label">2. Chọn chủ đề:</span><div id="topic-btn-group" class="btn-group"><button class="topic-btn" data-topic="Business Case">Tình huống Kinh doanh</button><button class="topic-btn" data-topic="SQL">Kiến thức SQL</button><button class="topic-btn" data-topic="Storytelling">Kể chuyện bằng Dữ liệu</button></div></div>
+                    <button id="startInterviewButton" disabled style="width: 100%; margin-top: 10px;">Bắt đầu Phỏng vấn</button>
+                 </div>
+                 <div id="interview-chat-section" class="chat-container" style="display: none;">
+                    <div class="chat-history" id="mock-interview-chat-history"></div>
+                    <form id="interview-chat-input-form" class="chat-input-form"><input type="text" id="interview-chat-input" placeholder="Nhập câu trả lời của bạn..." autocomplete="off"><button type="submit">Gửi</button></form>
+                 </div>
+            </div>`;
+        }
     </script>
 </body>
 </html>
