@@ -77,8 +77,28 @@
         .user-message { background-color: var(--user-message-bg); align-self: flex-end; }
         .ai-message { background-color: var(--ai-message-bg); border: 1px solid #e2e8f0; align-self: flex-start; }
         .chat-message .message-text { word-wrap: break-word; min-height: 1.5em; width: 100%;}
+        
+        .message-text h1, .message-text h2, .message-text h3, .message-text h4 {
+            margin-top: 1.2em; margin-bottom: 0.6em; font-weight: 600; line-height: 1.2; color: var(--sidebar-bg);
+        }
+        .message-text h1 { font-size: 1.5rem; }
+        .message-text h2 { font-size: 1.25rem; }
+        .message-text h3 { font-size: 1.1rem; }
+        .message-text p { margin-bottom: 1em; }
+        .message-text ul, .message-text ol { margin-bottom: 1em; padding-left: 1.5em; }
+        .message-text li { margin-bottom: 0.3em; }
+        .message-text strong { font-weight: 600; }
+        .message-text em { font-style: italic; }
+        .message-text blockquote { border-left: 4px solid #e2e8f0; padding-left: 1em; margin-left: 0; color: #64748b; font-style: italic; }
+        .message-text code { background-color: var(--btn-secondary-bg); padding: 0.2em 0.4em; border-radius: 4px; font-family: 'Courier New', Courier, monospace; font-size: 0.9em;}
+        .message-text pre { background-color: var(--sidebar-bg); color: var(--text-light); padding: 1em; border-radius: 8px; overflow-x: auto; margin-bottom: 1em; }
+        .message-text pre code { background-color: transparent; padding: 0; color: inherit; }
+        .message-text a { color: var(--accent-color); text-decoration: underline; }
+        .message-text table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+        .message-text th, .message-text td { border: 1px solid #cbd5e1; padding: 8px; text-align: left; }
+        .message-text th { background-color: #f1f5f9; font-weight: 600; }
+        
         .chart-container { max-width: 100%; margin-top: 15px; }
-
         .chat-input-form { display: flex; gap: 10px; }
         .chat-input-form input { flex-grow: 1; padding: 12px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 16px; }
         .large-spinner { width: 40px; height: 40px; border: 5px solid #e2e8f0; border-radius: 50%; border-top-color: var(--accent-color); margin: auto; animation: spin 1s linear infinite; }
@@ -147,7 +167,6 @@
             appId: "1:75283657811:web:9c5c3e778396b9a340c2a6"
         };
         
-        // --- 1. INITIALIZE SERVICES ---
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
@@ -158,14 +177,12 @@
             console.error("Could not initialize AI Model", e);
         }
 
-        // --- 2. DOM ELEMENTS & STATE ---
         const authContainer = document.getElementById('auth-container');
         const appContainer = document.getElementById('app-container');
         const mainContent = document.getElementById('main-content');
         let currentUser = null;
         let unsubscribeListeners = [];
 
-        // --- 3. AUTHENTICATION LOGIC ---
         onAuthStateChanged(auth, user => {
             if (user) {
                 currentUser = user;
@@ -206,11 +223,9 @@
         });
 
         document.getElementById('logout-button').addEventListener('click', () => signOut(auth));
-        
         document.getElementById('show-signup').addEventListener('click', e => { e.preventDefault(); document.getElementById('login-form').style.display = 'none'; document.getElementById('signup-form').style.display = 'block'; });
         document.getElementById('show-login').addEventListener('click', e => { e.preventDefault(); document.getElementById('login-form').style.display = 'block'; document.getElementById('signup-form').style.display = 'none'; });
         
-        // --- 4. APP INITIALIZATION & CLEANUP ---
         function initializeAllModules() {
             mainContent.innerHTML = getModulesHTML();
             setupNavigation();
@@ -226,11 +241,25 @@
             mainContent.innerHTML = '';
         }
 
-        // --- 5. FIRESTORE & HELPER FUNCTIONS ---
         async function saveData(moduleId, dataToSave) {
             if (!currentUser) return;
             const docRef = doc(db, 'users', currentUser.uid, 'chats', moduleId);
             await setDoc(docRef, dataToSave, { merge: true });
+        }
+
+        function getValidHistoryForChat(history) {
+            const validHistory = [];
+            if (!history || history.length === 0) return [];
+            for (const currentMsg of history) {
+                const lastMsg = validHistory.length > 0 ? validHistory[validHistory.length - 1] : null;
+                if (!currentMsg.role || !currentMsg.parts) continue;
+                if (lastMsg && lastMsg.role === currentMsg.role) {
+                    validHistory[validHistory.length - 1] = currentMsg;
+                } else {
+                    validHistory.push(currentMsg);
+                }
+            }
+            return validHistory;
         }
 
         function addMessage(historyEl, sender, text, isHTML = false) {
@@ -240,7 +269,11 @@
             messageDiv.className = `chat-message ${senderClass}`;
             const textSpan = document.createElement('span');
             textSpan.className = 'message-text';
-            if (isHTML) textSpan.innerHTML = text; else textSpan.textContent = text;
+            if (isHTML) {
+                textSpan.innerHTML = marked.parse(text);
+            } else {
+                textSpan.textContent = text;
+            }
             messageDiv.appendChild(textSpan);
             historyEl.appendChild(messageDiv);
             historyEl.scrollTop = historyEl.scrollHeight;
@@ -250,11 +283,8 @@
         function renderChart(canvasId, chartData) {
             const ctx = document.getElementById(canvasId);
             if (!ctx) return;
-            // Destroy previous chart instance if it exists
             const existingChart = Chart.getChart(ctx);
-            if (existingChart) {
-                existingChart.destroy();
-            }
+            if (existingChart) existingChart.destroy();
             new Chart(ctx, chartData);
         }
 
@@ -266,9 +296,7 @@
             if (match && match[1]) {
                 const chartJsonString = match[1];
                 const textContent = fullResponseText.replace(chartRegex, '').trim();
-                
                 textEl.innerHTML = marked.parse(textContent);
-
                 try {
                     const chartData = JSON.parse(chartJsonString);
                     const chartId = 'chart-' + Date.now() + Math.random();
@@ -279,7 +307,6 @@
                         messageContainer.appendChild(chartContainerDiv);
                     }
                     chartContainerDiv.innerHTML = `<canvas id="${chartId}"></canvas>`;
-                    
                     setTimeout(() => renderChart(chartId, chartData), 0);
                 } catch (e) {
                     console.error("Error parsing or rendering chart JSON:", e);
@@ -294,18 +321,15 @@
             let fullResponseText = "";
             const textEl = messageContainer.querySelector('.message-text');
             const chatContainer = messageContainer.closest('.chat-history');
-
             for await (const chunk of resultStream) {
                 fullResponseText += chunk.text();
                 textEl.innerHTML = marked.parse(fullResponseText.replace(/<chart>[\s\S]*?<\/chart>/, ''));
                 if (chatContainer) chatContainer.scrollTop = chatContainer.scrollHeight;
             }
-            
             await processAndDisplayMessage(messageContainer, fullResponseText);
             return fullResponseText;
         }
         
-        // --- 6. NAVIGATION ---
         function setupNavigation() {
             document.querySelectorAll('.nav-link').forEach(link => {
                 link.addEventListener('click', e => { e.preventDefault(); window.history.pushState(null, '', e.currentTarget.hash); showModule(e.currentTarget.hash); });
@@ -319,26 +343,25 @@
             document.querySelectorAll('.module-content').forEach(c => c.classList.toggle('active', c.id === targetId));
         }
 
-        // --- 7. MODULE SETUP FUNCTIONS ---
         function setupLearningRoom() {
             const moduleId = 'learning-room';
             const historyEl = document.getElementById(`${moduleId}-chat-history`);
             const form = document.getElementById(`${moduleId}-chat-form`);
             const input = document.getElementById(`${moduleId}-chat-input`);
             const clearBtn = document.getElementById(`clear-${moduleId}-history`);
-            
             let history = [];
             let chatSession = null;
 
             const unsub = onSnapshot(doc(db, "users", currentUser.uid, "chats", moduleId), (doc) => {
                 historyEl.innerHTML = '';
                 const data = doc.data();
-                history = (data && data.history) ? data.history : [];
+                history = getValidHistoryForChat((data && data.history) ? data.history : []);
                 if (history.length > 0) {
                     history.forEach(msg => addMessage(historyEl, msg.role === 'user' ? 'user' : 'model', msg.parts[0].text, true));
                     chatSession = geminiModel.startChat({ history });
                 } else {
-                     addMessage(historyEl, 'ai', "Xin chào! Tôi là trợ lý học tập BA của bạn. Bạn muốn hỏi về chủ đề gì hôm nay?");
+                     const aiMsgContainer = addMessage(historyEl, 'ai', "", true);
+                     processAndDisplayMessage(aiMsgContainer, "Xin chào! Tôi là trợ lý học tập BA của bạn. Bạn muốn hỏi về chủ đề gì hôm nay?");
                 }
             });
             unsubscribeListeners.push(unsub);
@@ -347,18 +370,13 @@
                 e.preventDefault();
                 const userQuery = input.value.trim();
                 if (!userQuery || !geminiModel) return;
-                
                 if (!chatSession) chatSession = geminiModel.startChat({ history });
-
                 history.push({ role: 'user', parts: [{ text: userQuery }] });
-                addMessage(historyEl, 'user', userQuery);
+                addMessage(historyEl, 'user', userQuery, false);
                 input.value = '';
-
                 const aiMessageContainer = addMessage(historyEl, 'ai', '<div class="large-spinner"></div>', true);
-                
                 const result = await chatSession.sendMessageStream(userQuery);
                 const fullResponse = await streamResponseToElement(aiMessageContainer, result.stream);
-    
                 history.push({ role: 'model', parts: [{ text: fullResponse }] });
                 await saveData(moduleId, { history });
             });
@@ -381,20 +399,18 @@
             const fileInput = document.getElementById('fileInput');
             const fileUploadText = document.getElementById('file-upload-text');
             const analyzeBtn = document.getElementById('analyzeFileButton');
-
             let history = [];
             let chatSession = null;
 
             const unsub = onSnapshot(doc(db, "users", currentUser.uid, "chats", moduleId), (docSnapshot) => {
                 historyEl.innerHTML = '';
                 const data = docSnapshot.data();
-                history = (data && data.history) ? data.history : [];
-                
+                history = getValidHistoryForChat((data && data.history) ? data.history : []);
                 if (history.length > 0) {
                     history.forEach(msg => {
                         const msgText = msg.parts[0].text;
                         if (msg.role !== 'user' || !msgText.startsWith('You are a helpful Business Analyst assistant.')) {
-                           const msgContainer = addMessage(historyEl, msg.role === 'user' ? 'user' : 'model', "");
+                           const msgContainer = addMessage(historyEl, msg.role === 'user' ? 'user' : 'model', "", true);
                            processAndDisplayMessage(msgContainer, msgText);
                         }
                     });
@@ -409,7 +425,6 @@
             unsubscribeListeners.push(unsub);
             
             document.querySelector('#case-trainer .file-upload-wrapper').addEventListener('click', () => fileInput.click());
-
             fileInput.addEventListener('change', (event) => {
                 const file = event.target.files[0];
                 if (!file) return;
@@ -420,21 +435,26 @@
             analyzeBtn.addEventListener('click', () => {
                 const file = fileInput.files[0];
                 if (!file || !geminiModel) return;
-
                 uploadSection.style.display = 'none';
                 chatSection.style.display = 'block';
                 const aiMessageContainer = addMessage(historyEl, 'ai', 'Đang xử lý file và phân tích...', true);
-
                 const reader = new FileReader();
                 reader.onload = async (e) => {
                     let dataContext = '';
                     try {
                         const fileContent = e.target.result;
                         const fileExtension = file.name.split('.').pop().toLowerCase();
-                        if (fileExtension === 'csv') dataContext = fileContent;
-                        else if (['xlsx', 'xls'].includes(fileExtension)) {
-                            const workbook = XLSX.read(fileContent, {type: 'array'});
-                            dataContext = XLSX.utils.sheet_to_csv(workbook.Sheets[workbook.SheetNames[0]]);
+                        if (fileExtension === 'csv') {
+                             dataContext = fileContent;
+                        } else if (['xlsx', 'xls'].includes(fileExtension)) {
+                            const workbook = XLSX.read(fileContent, { type: 'array' });
+                            let fullDataContext = [];
+                            workbook.SheetNames.forEach(sheetName => {
+                                fullDataContext.push(`--- SHEET: ${sheetName} ---\n`);
+                                const sheetAsCsv = XLSX.utils.sheet_to_csv(workbook.Sheets[sheetName]);
+                                fullDataContext.push(sheetAsCsv);
+                            });
+                            dataContext = fullDataContext.join('\n');
                         } else if (fileExtension === 'pdf') {
                             const pdf = await pdfjsLib.getDocument(new Uint8Array(fileContent)).promise;
                             for (let i = 1; i <= pdf.numPages; i++) { const page = await pdf.getPage(i); const textContent = await page.getTextContent(); dataContext += textContent.items.map(item => item.str).join(' ') + '\n'; }
@@ -445,19 +465,12 @@
                     } catch (err) {
                         aiMessageContainer.querySelector('.message-text').innerHTML = `Lỗi khi đọc file: ${err.message}`; return;
                     }
-                    
                     if (!dataContext) { aiMessageContainer.querySelector('.message-text').innerHTML = "Lỗi: Không thể đọc file hoặc định dạng không được hỗ trợ."; return; }
-
-                    const initialPrompt = `You are a helpful Business Analyst assistant.\nThe user has uploaded the following data:\n---DATA---\n${dataContext}\n---END DATA---\nFirst, provide a brief summary of the data, key observations, and suggest 3 open-ended questions for discussion.\n\nIMPORTANT: When the user asks you to create a chart (e.g., "draw a bar chart", "vẽ biểu đồ tròn"), you MUST respond with a JSON object for Chart.js enclosed in <chart> tags.\nThe JSON must be valid and follow the Chart.js structure.\nFor example:\n<chart>\n{\n  "type": "bar",\n  "data": {\n    "labels": ["Tháng 1", "Tháng 2", "Tháng 3"],\n    "datasets": [{\n      "label": "Doanh thu",\n      "data": [120, 190, 300],\n      "backgroundColor": ["rgba(54, 162, 235, 0.6)"]\n    }]\n  }\n}\n</chart>\n\nOnly generate the <chart> block when a visualization is explicitly requested. Now, begin with the data summary.`;
-                    
+                    const initialPrompt = `You are a helpful Business Analyst assistant.\nThe user has uploaded the following data from one or more spreadsheet sheets:\n---DATA---\n${dataContext}\n---END DATA---\nFirst, provide a brief summary of all the data, key observations, and suggest 3 open-ended questions for discussion.\n\nIMPORTANT: When the user asks you to create a chart (e.g., "draw a bar chart", "vẽ biểu đồ tròn"), you MUST respond with a JSON object for Chart.js enclosed in <chart> tags.\nThe JSON must be valid and follow the Chart.js structure.\nFor example:\n<chart>\n{\n  "type": "bar",\n  "data": {\n    "labels": ["Tháng 1", "Tháng 2", "Tháng 3"],\n    "datasets": [{\n      "label": "Doanh thu",\n      "data": [120, 190, 300],\n      "backgroundColor": ["rgba(54, 162, 235, 0.6)"]\n    }]\n  }\n}\n</chart>\n\nOnly generate the <chart> block when a visualization is explicitly requested. Now, begin with the data summary.`;
                     chatSession = geminiModel.startChat();
                     const result = await chatSession.sendMessageStream(initialPrompt);
                     const fullResponseText = await streamResponseToElement(aiMessageContainer, result.stream);
-
-                    history = [
-                        { role: 'user', parts: [{ text: initialPrompt }] },
-                        { role: 'model', parts: [{ text: fullResponseText }] }
-                    ];
+                    history = [ { role: 'user', parts: [{ text: initialPrompt }] }, { role: 'model', parts: [{ text: fullResponseText }] } ];
                     await saveData(moduleId, { history });
                 };
                 if (['csv', 'txt'].includes(file.name.split('.').pop().toLowerCase())) reader.readAsText(file);
@@ -468,15 +481,12 @@
                 e.preventDefault();
                 const userQuery = inputEl.value.trim();
                 if (!userQuery || !chatSession) return;
-                
                 history.push({ role: 'user', parts: [{ text: userQuery }] });
-                addMessage(historyEl, 'user', userQuery);
+                addMessage(historyEl, 'user', userQuery, false);
                 inputEl.value = '';
-
                 const aiMessageContainer = addMessage(historyEl, 'ai', '<div class="large-spinner"></div>', true);
                 const result = await chatSession.sendMessageStream(userQuery);
                 const fullResponseText = await streamResponseToElement(aiMessageContainer, result.stream);
-                    
                 history.push({ role: 'model', parts: [{ text: fullResponseText }] });
                 await saveData(moduleId, { history });
             });
@@ -502,7 +512,6 @@
             const startBtn = document.getElementById('startInterviewButton');
             const langGroup = document.getElementById('language-btn-group');
             const topicGroup = document.getElementById('topic-btn-group');
-            
             let sessionState = { history: [], language: 'vietnamese', topic: null, inProgress: false };
             let chatSession = null;
             const speech = window.speechSynthesis;
@@ -511,7 +520,7 @@
                 historyEl.innerHTML = '';
                 const data = docSnapshot.data();
                 sessionState = data ? { ...{history:[], inProgress: false, language: 'vietnamese', topic: null}, ...data } : sessionState;
-                
+                sessionState.history = getValidHistoryForChat(sessionState.history);
                 if (sessionState.inProgress) {
                     sessionState.history.forEach(msg => {
                         if (msg.role !== 'user' || !msg.parts[0].text.startsWith('You are an experienced hiring manager')) {
@@ -530,7 +539,6 @@
             unsubscribeListeners.push(unsub);
             
             const checkSelections = () => { startBtn.disabled = !sessionState.topic; };
-            
             langGroup.addEventListener('click', (e) => { 
                 if (e.target.classList.contains('language-btn')) { 
                     langGroup.querySelector('.selected')?.classList.remove('selected'); 
@@ -549,21 +557,14 @@
 
             startBtn.addEventListener('click', async () => {
                 if (startBtn.disabled) return;
-                
                 sessionState.inProgress = true;
                 const initialPrompt = `You are an experienced hiring manager. You must conduct the entire interview in ${sessionState.language}. Start by introducing yourself in ${sessionState.language}. Then, ask the first question related to the topic: "${sessionState.topic}". Ask only one question at a time.`;
-                
                 chatSession = geminiModel.startChat();
                 const aiMessageContainer = addMessage(historyEl, 'ai', '<div class="large-spinner"></div>', true);
                 const result = await chatSession.sendMessageStream(initialPrompt);
                 const fullResponseText = await streamResponseToElement(aiMessageContainer, result.stream);
-                
-                sessionState.history = [
-                    { role: 'user', parts: [{ text: initialPrompt }] },
-                    { role: 'model', parts: [{ text: fullResponseText }] }
-                ];
+                sessionState.history = [ { role: 'user', parts: [{ text: initialPrompt }] }, { role: 'model', parts: [{ text: fullResponseText }] } ];
                 await saveData(moduleId, sessionState);
-                
                 addSpeakButton(aiMessageContainer, sessionState.language);
                 speakText(fullResponseText, sessionState.language);
             });
@@ -572,19 +573,14 @@
                 e.preventDefault();
                 const userResponse = inputEl.value.trim();
                 if (!userResponse || !chatSession) return;
-                
                 sessionState.history.push({ role: 'user', parts: [{ text: userResponse }] });
-                addMessage(historyEl, 'user', userResponse);
+                addMessage(historyEl, 'user', userResponse, false);
                 inputEl.value = '';
-
                 const aiMessageContainer = addMessage(historyEl, 'ai', '<div class="large-spinner"></div>', true);
-                
                 const result = await chatSession.sendMessageStream(userResponse);
                 const fullResponseText = await streamResponseToElement(aiMessageContainer, result.stream);
-                
                 sessionState.history.push({ role: 'model', parts: [{ text: fullResponseText }] });
                 await saveData(moduleId, sessionState);
-
                 addSpeakButton(aiMessageContainer, sessionState.language);
                 speakText(fullResponseText, sessionState.language);
             });
@@ -620,25 +616,19 @@
             }
         }
 
-        // --- 8. HTML TEMPLATES ---
         function getModulesHTML() {
             return `
-            <!-- Module 1: BA Learning Room -->
             <div id="learning-room" class="module-content">
                  <div class="module-header-wrapper"><h1 class="module-header">BA Learning Room</h1><button id="clear-learning-room-history" class="btn-icon btn-danger" title="Bắt đầu lại"><i class="fa-solid fa-trash-can"></i></button></div>
                  <p class="module-subheader">Trò chuyện với trợ lý AI để tìm hiểu sâu về các khái niệm Business Analytics.</p>
                  <div class="chat-container"><div class="chat-history" id="learning-room-chat-history"></div><form id="learning-room-chat-form" class="chat-input-form"><input type="text" id="learning-room-chat-input" placeholder="Ví dụ: Giải thích về A/B Testing..." autocomplete="off"><button type="submit">Gửi</button></form></div>
             </div>
-    
-            <!-- Module 2: AI Case Trainer -->
             <div id="case-trainer" class="module-content">
                  <div class="module-header-wrapper"><h1 class="module-header">AI Case Trainer</h1><button id="clear-case-trainer-history" class="btn-icon btn-danger" title="Bắt đầu lại"><i class="fa-solid fa-trash-can"></i></button></div>
                  <p class="module-subheader">Tải lên file dữ liệu và yêu cầu AI phân tích hoặc vẽ biểu đồ.</p>
                  <div id="file-upload-section" class="controls-box"><label for="fileInput" class="file-upload-wrapper"><i class="fa-solid fa-cloud-arrow-up fa-2x"></i> <br><span id="file-upload-text">Nhấp để chọn file CSV, Excel, PDF hoặc DOCX</span></label><input type="file" id="fileInput" accept=".csv, .xlsx, .xls, .pdf, .docx" style="display: none;"><button id="analyzeFileButton" disabled style="margin-top: 20px; width: 100%;"><span>Bắt đầu Phân tích</span></button></div>
                  <div id="case-trainer-chat-section" class="chat-container" style="display: none;"><div class="chat-history" id="case-trainer-chat-history"></div><form id="case-trainer-chat-form" class="chat-input-form"><input type="text" id="case-trainer-chat-input" placeholder="Đặt câu hỏi hoặc yêu cầu vẽ biểu đồ..." autocomplete="off"><button type="submit">Gửi</button></form></div>
             </div>
-            
-            <!-- Module 3: Mock Interview -->
             <div id="mock-interview" class="module-content">
                 <div class="module-header-wrapper"><h1 class="module-header">Mock Interview</h1><button id="clear-mock-interview-history" class="btn-icon btn-danger" title="Bắt đầu lại"><i class="fa-solid fa-trash-can"></i></button></div>
                  <p class="module-subheader">Luyện tập phỏng vấn với nhà tuyển dụng AI.</p>
