@@ -294,10 +294,12 @@
             const match = fullResponseText.match(chartRegex);
 
             if (match && match[1]) {
-                const chartJsonString = match[1];
+                const chartJsonString = match[1].trim();
                 const textContent = fullResponseText.replace(chartRegex, '').trim();
                 textEl.innerHTML = marked.parse(textContent);
                 try {
+                    // FIX: Removed the regex that could corrupt valid JSON.
+                    // Now parsing the string from the AI directly.
                     const chartData = JSON.parse(chartJsonString);
                     const chartId = 'chart-' + Date.now() + Math.random();
                     let chartContainerDiv = messageContainer.querySelector('.chart-container');
@@ -310,7 +312,9 @@
                     setTimeout(() => renderChart(chartId, chartData), 0);
                 } catch (e) {
                     console.error("Error parsing or rendering chart JSON:", e);
-                    textEl.innerHTML += "\n<p><em>Lỗi: Không thể hiển thị biểu đồ.</em></p>";
+                    // Log the string that failed to parse for better debugging
+                    console.error("Original AI-generated string that FAILED to parse:", chartJsonString);
+                    textEl.innerHTML += "\n<p><em>Lỗi: Không thể hiển thị biểu đồ do định dạng dữ liệu không hợp lệ.</em></p>";
                 }
             } else {
                 textEl.innerHTML = marked.parse(fullResponseText);
