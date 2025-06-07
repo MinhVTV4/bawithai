@@ -27,6 +27,8 @@
             --user-message-bg: #e0f2fe;
             --ai-message-bg: #ffffff;
             --btn-secondary-bg: #e2e8f0;
+            --danger-color: #ef4444;
+            --danger-hover: #dc2626;
         }
         body { font-family: 'Inter', sans-serif; margin: 0; background-color: var(--main-bg); color: var(--text-dark); display: flex; height: 100vh; overflow: hidden; }
         #sidebar { width: 250px; background-color: var(--sidebar-bg); color: var(--text-light); padding: 20px 0; display: flex; flex-direction: column; flex-shrink: 0; }
@@ -39,7 +41,8 @@
         #main-content { flex-grow: 1; padding: 30px; overflow-y: auto; }
         .module-content { display: none; }
         .module-content.active { display: block; }
-        .module-header { font-size: 2rem; font-weight: bold; margin-bottom: 10px; color: var(--sidebar-bg); }
+        .module-header-wrapper { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .module-header { font-size: 2rem; font-weight: bold; color: var(--sidebar-bg); margin: 0; }
         .module-subheader { font-size: 1rem; color: #64748b; margin-bottom: 30px; }
         .controls-box, .chat-container, .response-box { width: 100%; max-width: 800px; background-color: #fff; padding: 25px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.05); }
         .markdown-content h1, .markdown-content h2, .markdown-content h3 { color: var(--sidebar-bg); margin-top: 1.5em; margin-bottom: 0.5em;}
@@ -54,6 +57,10 @@
         button { padding: 10px 20px; background-color: var(--accent-color); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 1rem; transition: background-color 0.3s ease; display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-weight: 600; }
         button:hover { background-color: var(--accent-hover); }
         button:disabled { background-color: #93c5fd; cursor: not-allowed; }
+        .btn-danger { background-color: var(--danger-color); }
+        .btn-danger:hover { background-color: var(--danger-hover); }
+        .btn-icon { padding: 8px 12px; }
+
         .chat-history { height: 500px; overflow-y: auto; border: 1px solid #e2e8f0; padding: 10px; border-radius: 8px; margin-bottom: 15px; display: flex; flex-direction: column; }
         .chat-message { padding: 10px 15px; border-radius: 12px; margin-bottom: 10px; max-width: 85%; line-height: 1.5; display: flex; align-items: flex-start; gap: 10px; }
         .user-message { background-color: var(--user-message-bg); align-self: flex-end; margin-left: auto; }
@@ -89,7 +96,10 @@
     <main id="main-content">
         <!-- Module 1: BA Learning Room -->
         <div id="learning-room" class="module-content">
-             <h1 class="module-header">BA Learning Room</h1>
+             <div class="module-header-wrapper">
+                <h1 class="module-header">BA Learning Room</h1>
+                <button id="clear-learning-history" class="btn-icon btn-danger" title="Bắt đầu lại"><i class="fa-solid fa-trash-can"></i></button>
+             </div>
              <p class="module-subheader">Trò chuyện với trợ lý AI để tìm hiểu sâu về các khái niệm Business Analytics.</p>
              <div class="chat-container">
                 <div class="chat-history" id="learning-chat-history">
@@ -104,7 +114,10 @@
 
         <!-- Module 2: AI Case Trainer -->
         <div id="case-trainer" class="module-content">
-             <h1 class="module-header">AI Case Trainer</h1>
+             <div class="module-header-wrapper">
+                 <h1 class="module-header">AI Case Trainer</h1>
+                 <button id="clear-case-trainer-history" class="btn-icon btn-danger" title="Bắt đầu lại"><i class="fa-solid fa-trash-can"></i></button>
+             </div>
              <p class="module-subheader">Bắt đầu một phiên phân tích bằng cách tải lên file dữ liệu.</p>
              <div id="file-upload-section" class="controls-box">
                 <label for="fileInput" class="file-upload-wrapper"><i class="fa-solid fa-cloud-arrow-up"></i> <span id="file-upload-text">Nhấp để chọn file CSV, Excel, PDF hoặc DOCX</span></label>
@@ -122,7 +135,10 @@
         
         <!-- Module 3: Mock Interview -->
         <div id="mock-interview" class="module-content">
-             <h1 class="module-header">Mock Interview</h1>
+            <div class="module-header-wrapper">
+                 <h1 class="module-header">Mock Interview</h1>
+                 <button id="clear-interview-history" class="btn-icon btn-danger" title="Bắt đầu lại"><i class="fa-solid fa-trash-can"></i></button>
+            </div>
              <p class="module-subheader">Luyện tập phỏng vấn với nhà tuyển dụng AI.</p>
              <div id="interview-setup-section" class="controls-box">
                 <div class="setup-group"><span class="setup-label">1. Chọn ngôn ngữ:</span><div id="language-btn-group" class="btn-group"><button class="language-btn selected" data-lang="vietnamese">Tiếng Việt</button><button class="language-btn" data-lang="english">English</button></div></div>
@@ -195,6 +211,7 @@
             const learningChatHistoryEl = document.getElementById('learning-chat-history');
             const learningChatForm = document.getElementById('learning-chat-form');
             const learningChatInput = document.getElementById('learning-chat-input');
+            const clearLearningHistoryBtn = document.getElementById('clear-learning-history');
             let learningHistory = [];
             let learningChatSession = null;
 
@@ -212,6 +229,14 @@
                 learningChatHistoryEl.appendChild(messageDiv);
                 learningChatHistoryEl.scrollTop = learningChatHistoryEl.scrollHeight;
                 return textSpan;
+            }
+            
+            function resetLearningSession() {
+                localStorage.removeItem('learningHistory');
+                learningHistory = [];
+                learningChatSession = null;
+                learningChatHistoryEl.innerHTML = '';
+                addLearningMessage('ai', "Xin chào! Tôi là trợ lý học tập BA của bạn. Bạn muốn hỏi về chủ đề gì hôm nay?", true);
             }
 
             function loadLearningHistory() {
@@ -251,6 +276,9 @@
                 }
             });
 
+            clearLearningHistoryBtn.addEventListener('click', resetLearningSession);
+
+
             // --- 4. "AI CASE TRAINER" LOGIC ---
             const fileInput = document.getElementById('fileInput');
             const fileUploadText = document.getElementById('file-upload-text');
@@ -260,6 +288,7 @@
             const caseTrainerChatHistoryEl = document.getElementById('case-trainer-chat-history');
             const caseTrainerChatForm = document.getElementById('case-trainer-chat-form');
             const caseTrainerChatInput = document.getElementById('case-trainer-chat-input');
+            const clearCaseTrainerHistoryBtn = document.getElementById('clear-case-trainer-history');
             let caseTrainerHistory = [];
             let caseTrainerChatSession = null;
 
@@ -278,13 +307,32 @@
                 caseTrainerChatHistoryEl.scrollTop = caseTrainerChatHistoryEl.scrollHeight;
                 return textSpan;
             }
+            
+            function resetCaseTrainerSession() {
+                localStorage.removeItem('caseTrainerHistory');
+                caseTrainerHistory = [];
+                caseTrainerChatSession = null;
+                caseTrainerChatHistoryEl.innerHTML = '';
+                fileInput.value = ''; // Clear file input
+                
+                fileUploadText.textContent = 'Nhấp để chọn file CSV, Excel, PDF hoặc DOCX';
+                analyzeFileButton.disabled = true;
+
+                caseTrainerChatSection.style.display = 'none';
+                fileUploadSection.style.display = 'block';
+            }
 
             function loadCaseTrainerSession() {
                 const savedHistory = loadFromLocalStorage('caseTrainerHistory');
-                if (savedHistory) {
+                if (savedHistory && savedHistory.length > 0) {
                     caseTrainerHistory = savedHistory;
                     caseTrainerChatHistoryEl.innerHTML = '';
-                    caseTrainerHistory.forEach(msg => addCaseTrainerMessage(msg.role === 'user' ? 'user' : 'ai', msg.parts[0].text, true));
+                    caseTrainerHistory.forEach(msg => {
+                        // Don't display the initial long system prompt
+                        if (msg.role !== 'user' || !msg.parts[0].text.startsWith('Phân tích tài liệu sau đây')) {
+                            addCaseTrainerMessage(msg.role === 'user' ? 'user' : 'ai', msg.parts[0].text, true);
+                        }
+                    });
                     
                     caseTrainerChatSession = geminiModel.startChat({ history: caseTrainerHistory });
                     fileUploadSection.style.display = 'none';
@@ -305,10 +353,7 @@
                 const file = fileInput.files[0];
                 if (!file || !geminiModel) return;
 
-                // Clear previous session
-                localStorage.removeItem('caseTrainerHistory');
-                caseTrainerHistory = [];
-                caseTrainerChatHistoryEl.innerHTML = '';
+                resetCaseTrainerSession(); // Clear previous session before starting a new one
                 
                 fileUploadSection.style.display = 'none';
                 caseTrainerChatSection.style.display = 'block';
@@ -321,22 +366,28 @@
                     const fileContent = e.target.result;
                     let dataContext = null;
 
-                    if (fileExtension === 'csv') {
-                        dataContext = fileContent;
-                    } else if (['xlsx', 'xls'].includes(fileExtension)) {
-                        const workbook = XLSX.read(fileContent, {type: 'array'});
-                        dataContext = XLSX.utils.sheet_to_csv(workbook.Sheets[workbook.SheetNames[0]]);
-                    } else if (fileExtension === 'pdf') {
-                        const pdf = await pdfjsLib.getDocument(new Uint8Array(fileContent)).promise; let fullText = '';
-                        for (let i = 1; i <= pdf.numPages; i++) { const page = await pdf.getPage(i); const textContent = await page.getTextContent(); fullText += textContent.items.map(item => item.str).join(' ') + '\n'; }
-                        dataContext = fullText;
-                    } else if (fileExtension === 'docx') {
-                        const result = await mammoth.extractRawText({ arrayBuffer: fileContent });
-                        dataContext = result.value;
+                    try {
+                        if (fileExtension === 'csv') {
+                            dataContext = fileContent;
+                        } else if (['xlsx', 'xls'].includes(fileExtension)) {
+                            const workbook = XLSX.read(fileContent, {type: 'array'});
+                            dataContext = XLSX.utils.sheet_to_csv(workbook.Sheets[workbook.SheetNames[0]]);
+                        } else if (fileExtension === 'pdf') {
+                            const pdf = await pdfjsLib.getDocument(new Uint8Array(fileContent)).promise; let fullText = '';
+                            for (let i = 1; i <= pdf.numPages; i++) { const page = await pdf.getPage(i); const textContent = await page.getTextContent(); fullText += textContent.items.map(item => item.str).join(' ') + '\n'; }
+                            dataContext = fullText;
+                        } else if (fileExtension === 'docx') {
+                            const result = await mammoth.extractRawText({ arrayBuffer: fileContent });
+                            dataContext = result.value;
+                        }
+                    } catch (error) {
+                        aiMessageElement.innerHTML = `Lỗi khi đọc file: ${error.message}`;
+                        return;
                     }
 
+
                     if(!dataContext) {
-                        aiMessageElement.innerHTML = "Lỗi: Không thể đọc file.";
+                        aiMessageElement.innerHTML = "Lỗi: Không thể đọc file hoặc định dạng không được hỗ trợ.";
                         return;
                     }
 
@@ -379,6 +430,9 @@
 
                 } catch (error) { aiMessageElement.innerHTML = `<p><b>Lỗi:</b> ${error.message}</p>`; }
             });
+            
+            clearCaseTrainerHistoryBtn.addEventListener('click', resetCaseTrainerSession);
+
 
             // --- 5. "MOCK INTERVIEW" LOGIC ---
             const interviewSetupSection = document.getElementById('interview-setup-section');
@@ -389,6 +443,7 @@
             const interviewChatHistoryEl = document.getElementById('interview-chat-history');
             const interviewChatForm = document.getElementById('interview-chat-input-form');
             const interviewChatInput = document.getElementById('interview-chat-input');
+            const clearInterviewHistoryBtn = document.getElementById('clear-interview-history');
             let selectedLanguage = 'vietnamese', selectedTopic = null, speech = window.speechSynthesis, interviewChatSession = null, interviewHistory = [];
 
             function addInterviewMessage(sender, text, isHTML = false) {
@@ -407,6 +462,22 @@
                 return textSpan;
             }
             
+            function resetInterviewSession() {
+                localStorage.removeItem('interviewSession');
+                interviewHistory = [];
+                interviewChatSession = null;
+                interviewChatHistoryEl.innerHTML = '';
+                speech.cancel();
+
+                // Reset selections
+                topicBtnGroup.querySelector('.selected')?.classList.remove('selected');
+                selectedTopic = null;
+                checkSelections();
+                
+                interviewChatSection.style.display = 'none';
+                interviewSetupSection.style.display = 'block';
+            }
+
             function loadInterviewSession() {
                 const savedSession = loadFromLocalStorage('interviewSession');
                 if(savedSession) {
@@ -415,7 +486,15 @@
                     selectedTopic = savedSession.topic;
 
                     interviewChatHistoryEl.innerHTML = '';
-                    interviewHistory.forEach(msg => addInterviewMessage(msg.role === 'user' ? 'user' : 'ai', msg.parts[0].text, true));
+                    interviewHistory.forEach(msg => {
+                         // Don't display the initial long system prompt
+                        if (msg.role !== 'user' || !msg.parts[0].text.startsWith('You are an experienced hiring manager')) {
+                            const messageElement = addInterviewMessage(msg.role === 'user' ? 'user' : 'ai', msg.parts[0].text, true);
+                             if (msg.role !== 'user') {
+                                addSpeakButton(messageElement.parentElement, selectedLanguage);
+                            }
+                        }
+                    });
                     
                     interviewChatSession = geminiModel.startChat({ history: interviewHistory });
                     interviewSetupSection.style.display = 'none';
@@ -449,10 +528,7 @@
             startInterviewButton.addEventListener('click', async () => {
                 if (!selectedTopic || !selectedLanguage || !geminiModel) return;
                 
-                // Clear previous session
-                localStorage.removeItem('interviewSession');
-                interviewHistory = [];
-                interviewChatHistoryEl.innerHTML = '';
+                resetInterviewSession();
 
                 interviewSetupSection.style.display = 'none';
                 interviewChatSection.style.display = 'block';
@@ -496,6 +572,8 @@
                     speakText(fullResponseText, selectedLanguage);
                 } catch (error) { aiMessageElement.innerHTML = `<p><b>Lỗi:</b> ${error.message}</p>`; }
             });
+            
+            clearInterviewHistoryBtn.addEventListener('click', resetInterviewSession);
             
             // --- INITIALIZE APP STATE ---
             loadLearningHistory();
