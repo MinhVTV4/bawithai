@@ -116,7 +116,6 @@
         .suggestion-btn { background-color: #eef2ff; color: #4f46e5; border: 1px solid #c7d2fe; padding: 8px 16px; font-size: 0.875rem; border-radius: 16px; cursor: pointer; transition: all 0.2s ease; }
         .suggestion-btn:hover { background-color: #c7d2fe; color: #1e1b4b; transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.05); }
         
-        /* NEW: Anomaly Detection Styling */
         .anomalies-container { margin-bottom: 15px; }
         .anomaly-item {
             background-color: var(--warning-bg);
@@ -387,9 +386,30 @@
              if (!container) return;
              container.innerHTML = '';
              if (match && match[1]) {
-                const items = match[1].trim().split('\n').filter(s => s.trim() !== '');
+                const content = match[1].trim();
+                let items = [];
+                
+                let itemTagName = '';
+                if (containerId.includes('suggestions')) {
+                    itemTagName = 'suggestion';
+                } else if (containerId.includes('anomalies')) {
+                    itemTagName = 'anomaly';
+                }
+
+                if (itemTagName) {
+                    const itemRegex = new RegExp(`<${itemTagName}>(.*?)</${itemTagName}>`, 'g');
+                    let itemMatch;
+                    while ((itemMatch = itemRegex.exec(content)) !== null) {
+                        items.push(itemMatch[1]);
+                    }
+                }
+                
+                if (items.length === 0) {
+                    items = content.split('\n').filter(s => s.trim() !== '');
+                }
+
                 items.forEach(itemText => {
-                    const element = elementCreator(itemText);
+                    const element = elementCreator(itemText.trim());
                     container.appendChild(element);
                 });
              }
@@ -429,7 +449,7 @@
         }
 
         function setupLearningRoom() {
-            // This function remains unchanged.
+            // This function remains unchanged from previous version
         }
         
         function setupCaseTrainer() {
@@ -579,7 +599,7 @@
         }
 
         function setupMockInterview() {
-           // This function remains unchanged.
+           // This function remains unchanged from previous version
         }
 
         function getModulesHTML() {
