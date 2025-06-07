@@ -298,8 +298,6 @@
                 const textContent = fullResponseText.replace(chartRegex, '').trim();
                 textEl.innerHTML = marked.parse(textContent);
                 try {
-                    // FIX: Removed the regex that could corrupt valid JSON.
-                    // Now parsing the string from the AI directly.
                     const chartData = JSON.parse(chartJsonString);
                     const chartId = 'chart-' + Date.now() + Math.random();
                     let chartContainerDiv = messageContainer.querySelector('.chart-container');
@@ -312,7 +310,6 @@
                     setTimeout(() => renderChart(chartId, chartData), 0);
                 } catch (e) {
                     console.error("Error parsing or rendering chart JSON:", e);
-                    // Log the string that failed to parse for better debugging
                     console.error("Original AI-generated string that FAILED to parse:", chartJsonString);
                     textEl.innerHTML += "\n<p><em>Lỗi: Không thể hiển thị biểu đồ do định dạng dữ liệu không hợp lệ.</em></p>";
                 }
@@ -470,7 +467,8 @@
                         aiMessageContainer.querySelector('.message-text').innerHTML = `Lỗi khi đọc file: ${err.message}`; return;
                     }
                     if (!dataContext) { aiMessageContainer.querySelector('.message-text').innerHTML = "Lỗi: Không thể đọc file hoặc định dạng không được hỗ trợ."; return; }
-                    const initialPrompt = `You are a helpful Business Analyst assistant.\nThe user has uploaded the following data from one or more spreadsheet sheets:\n---DATA---\n${dataContext}\n---END DATA---\nFirst, provide a brief summary of all the data, key observations, and suggest 3 open-ended questions for discussion.\n\nIMPORTANT: When the user asks you to create a chart (e.g., "draw a bar chart", "vẽ biểu đồ tròn"), you MUST respond with a JSON object for Chart.js enclosed in <chart> tags.\nThe JSON must be valid and follow the Chart.js structure.\nFor example:\n<chart>\n{\n  "type": "bar",\n  "data": {\n    "labels": ["Tháng 1", "Tháng 2", "Tháng 3"],\n    "datasets": [{\n      "label": "Doanh thu",\n      "data": [120, 190, 300],\n      "backgroundColor": ["rgba(54, 162, 235, 0.6)"]\n    }]\n  }\n}\n</chart>\n\nOnly generate the <chart> block when a visualization is explicitly requested. Now, begin with the data summary.`;
+                    // FIX: Updated prompt to forbid functions
+                    const initialPrompt = `You are a helpful Business Analyst assistant.\nThe user has uploaded the following data from one or more spreadsheet sheets:\n---DATA---\n${dataContext}\n---END DATA---\nFirst, provide a brief summary of all the data, key observations, and suggest 3 open-ended questions for discussion.\n\nIMPORTANT: When the user asks you to create a chart (e.g., "draw a bar chart", "vẽ biểu đồ tròn"), you MUST respond with a **strictly valid, data-only JSON object** for Chart.js enclosed in <chart> tags.\nThe JSON must NOT contain any JavaScript, including function declarations, comments, or trailing commas. All property keys must be in double quotes. For example:\n<chart>\n{\n  "type": "bar",\n  "data": {\n    "labels": ["Tháng 1", "Tháng 2", "Tháng 3"],\n    "datasets": [{\n      "label": "Doanh thu",\n      "data": [120, 190, 300],\n      "backgroundColor": "rgba(54, 162, 235, 0.6)"\n    }]\n  },\n  "options": {}\n}\n</chart>\n\nOnly generate the <chart> block when a visualization is explicitly requested. Now, begin with the data summary.`;
                     chatSession = geminiModel.startChat();
                     const result = await chatSession.sendMessageStream(initialPrompt);
                     const fullResponseText = await streamResponseToElement(aiMessageContainer, result.stream);
