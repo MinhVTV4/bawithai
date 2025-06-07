@@ -231,7 +231,25 @@
             const errorDiv = document.getElementById('login-error');
             errorDiv.textContent = '';
             signInWithEmailAndPassword(auth, email, password)
-                .catch(error => { errorDiv.textContent = "Email hoặc mật khẩu không đúng."; });
+                .catch(error => {
+                    console.error("Login Error:", error.code);
+                    switch (error.code) {
+                        case 'auth/user-not-found':
+                        case 'auth/wrong-password':
+                        case 'auth/invalid-credential':
+                            errorDiv.textContent = "Email hoặc mật khẩu không đúng.";
+                            break;
+                        case 'auth/invalid-email':
+                            errorDiv.textContent = "Địa chỉ email không hợp lệ.";
+                            break;
+                        case 'auth/user-disabled':
+                            errorDiv.textContent = "Tài khoản này đã bị vô hiệu hóa.";
+                            break;
+                        default:
+                            errorDiv.textContent = "Đã xảy ra lỗi khi đăng nhập. Vui lòng thử lại.";
+                            break;
+                    }
+                });
         });
         
         document.getElementById('signup-form').addEventListener('submit', e => {
@@ -242,9 +260,21 @@
             errorDiv.textContent = '';
             createUserWithEmailAndPassword(auth, email, password)
                 .catch(error => {
-                    if (error.code === 'auth/email-already-in-use') errorDiv.textContent = "Email này đã được sử dụng.";
-                    else if (error.code === 'auth/weak-password') errorDiv.textContent = "Mật khẩu quá yếu (ít nhất 6 ký tự).";
-                    else errorDiv.textContent = "Đã xảy ra lỗi khi đăng ký.";
+                    console.error("Signup Error:", error.code);
+                    switch (error.code) {
+                        case 'auth/email-already-in-use':
+                            errorDiv.textContent = "Địa chỉ email này đã được sử dụng.";
+                            break;
+                        case 'auth/invalid-email':
+                            errorDiv.textContent = "Địa chỉ email không hợp lệ.";
+                            break;
+                        case 'auth/weak-password':
+                            errorDiv.textContent = "Mật khẩu quá yếu (cần ít nhất 6 ký tự).";
+                            break;
+                        default:
+                            errorDiv.textContent = "Đã xảy ra lỗi khi đăng ký. Vui lòng thử lại.";
+                            break;
+                    }
                 });
         });
 
@@ -306,18 +336,14 @@
             return messageDiv;
         }
         
-        function renderChart(canvasId, chartData) {
-            const ctx = document.getElementById(canvasId);
-            if (!ctx) return;
-
+        function renderChart(canvasElement, chartData) {
+            if (!canvasElement) return;
             if (chartData.type === 'horizontalBar') {
                 chartData.type = 'bar';
-                if (!chartData.options) {
-                    chartData.options = {};
-                }
+                if (!chartData.options) chartData.options = {};
                 chartData.options.indexAxis = 'y';
             }
-
+            const ctx = canvasElement.getContext('2d');
             const existingChart = Chart.getChart(ctx);
             if (existingChart) existingChart.destroy();
             new Chart(ctx, chartData);
@@ -344,15 +370,17 @@
                 const chartJsonString = chartMatch[1].trim();
                 try {
                     const chartData = JSON.parse(chartJsonString);
-                    const chartId = 'chart-' + Date.now() + Math.random();
                     let chartContainerDiv = messageContainer.querySelector('.chart-container');
                     if (!chartContainerDiv) {
                         chartContainerDiv = document.createElement('div');
                         chartContainerDiv.className = 'chart-container';
                         messageContainer.appendChild(chartContainerDiv);
                     }
-                    chartContainerDiv.innerHTML = `<canvas id="${chartId}"></canvas>`;
-                    setTimeout(() => renderChart(chartId, chartData), 0);
+                    const canvas = document.createElement('canvas');
+                    chartContainerDiv.innerHTML = '';
+                    chartContainerDiv.appendChild(canvas);
+                    // FIX: Use setTimeout to ensure the canvas is rendered before Chart.js tries to use it.
+                    setTimeout(() => renderChart(canvas, chartData), 0);
                 } catch (e) {
                     console.error("Error parsing or rendering chart JSON:", e);
                     console.error("Original AI-generated string that FAILED to parse:", chartJsonString);
@@ -457,13 +485,11 @@
             
             const systemInstruction = {
                 role: "system",
-                parts: [{ text: "You are a helpful assistant for Business Analytics students. All your responses must be in Vietnamese. After every response, you MUST provide exactly 3 concise, relevant follow-up questions inside <suggestions> tags. Do not use markdown formatting for the suggestions."}]
+                parts: [{ text: "You are a helpful assistant for Business Analytics students. All your responses must be in Vietnamese."}]
             };
 
             const unsub = onSnapshot(doc(db, "users", currentUser.uid, "chats", moduleId), (doc) => {
                 historyEl.innerHTML = '';
-                document.getElementById('learning-room-suggestions').innerHTML = '';
-
                 const data = doc.data();
                 history = getValidHistoryForChat((data && data.history) ? data.history : []);
                 
@@ -483,8 +509,6 @@
             
             form.addEventListener('submit', async e => {
                 e.preventDefault();
-                document.getElementById('learning-room-suggestions').innerHTML = '';
-
                 const userQuery = input.value.trim();
                 if (!userQuery || !geminiModel) return;
                 if (!chatSession) {
@@ -542,12 +566,7 @@
                 const data = docSnapshot.data();
                 history = getValidHistoryForChat((data && data.history) ? data.history : []);
                 if (history.length > 0) {
-                    const systemInstruction = {
-                         role: "system",
-                         parts: [{ text: `You are a helpful Business Analyst assistant. Your response language MUST be ${selectedLanguage}. After every text-based response, provide exactly 3 concise, relevant follow-up questions in ${selectedLanguage} inside <suggestions> tags. If you generate a chart, you can omit the suggestions.`}]
-                    };
-                    chatSession = geminiModel.startChat({ history, systemInstruction });
-                    
+                    chatSession = geminiModel.startChat({ history });
                     history.forEach(msg => {
                         const msgText = msg.parts[0].text;
                         if (msg.role !== 'user' || !msgText.startsWith('You are a helpful Business Analyst assistant.')) {
@@ -678,14 +697,13 @@
 
             const unsub = onSnapshot(doc(db, "users", currentUser.uid, "chats", moduleId), (docSnapshot) => {
                 historyEl.innerHTML = '';
-                document.getElementById('mock-interview-suggestions').innerHTML = '';
                 const data = docSnapshot.data();
                 sessionState = data ? { ...{history:[], inProgress: false, language: 'vietnamese', topic: null}, ...data } : sessionState;
                 sessionState.history = getValidHistoryForChat(sessionState.history);
 
                 const systemInstruction = {
                     role: "system",
-                    parts: [{ text: `You are an experienced hiring manager conducting an interview. You must use the ${sessionState.language} language for the entire conversation. Ask one question at a time. After each of your questions/responses, provide exactly 3 concise, relevant follow-up suggestions in ${sessionState.language} inside <suggestions> tags.` }]
+                    parts: [{ text: `You are an experienced hiring manager conducting an interview. You must use the ${sessionState.language} language for the entire conversation. Ask one question at a time.` }]
                 };
                 chatSession = geminiModel.startChat({ history: sessionState.history, systemInstruction });
 
@@ -730,7 +748,7 @@
                 
                 const systemInstruction = {
                     role: "system",
-                    parts: [{ text: `You are an experienced hiring manager conducting an interview. You must use the ${sessionState.language} language for the entire conversation. Ask one question at a time. After each of your questions/responses, provide exactly 3 concise, relevant follow-up suggestions in ${sessionState.language} inside <suggestions> tags.` }]
+                    parts: [{ text: `You are an experienced hiring manager conducting an interview. You must use the ${sessionState.language} language for the entire conversation. Ask one question at a time.` }]
                 };
                 chatSession = geminiModel.startChat({ systemInstruction });
                 
@@ -749,7 +767,6 @@
 
             form.addEventListener('submit', async (e) => {
                 e.preventDefault();
-                 document.getElementById('mock-interview-suggestions').innerHTML = '';
                 const userResponse = inputEl.value.trim();
                 if (!userResponse || !chatSession) return;
                 
@@ -803,7 +820,6 @@
                  <p class="module-subheader">Trò chuyện với trợ lý AI để tìm hiểu sâu về các khái niệm Business Analytics.</p>
                  <div class="chat-container">
                     <div class="chat-history" id="learning-room-chat-history"></div>
-                    <div id="learning-room-suggestions" class="suggestions-container"></div>
                     <form id="learning-room-chat-form" class="chat-input-form"><input type="text" id="learning-room-chat-input" placeholder="Ví dụ: Giải thích về A/B Testing..." autocomplete="off"><button type="submit">Gửi</button></form>
                  </div>
             </div>
@@ -839,7 +855,6 @@
                  </div>
                  <div id="interview-chat-section" class="chat-container" style="display: none;">
                     <div class="chat-history" id="mock-interview-chat-history"></div>
-                    <div id="mock-interview-suggestions" class="suggestions-container"></div>
                     <form id="interview-chat-input-form" class="chat-input-form"><input type="text" id="interview-chat-input" placeholder="Nhập câu trả lời của bạn..." autocomplete="off"><button type="submit">Gửi</button></form>
                  </div>
             </div>`;
