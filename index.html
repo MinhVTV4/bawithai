@@ -427,7 +427,7 @@
         function displayContentFromTag(match, containerId, elementCreator, moduleId) {
              const container = document.getElementById(containerId);
              if (!container) return;
-             if (match && match[1]) {
+             if(match && match[1]) { // Only clear and update if there's new content for this tag
                 container.innerHTML = '';
                 const content = match[1].trim();
                 let items = [];
@@ -717,10 +717,6 @@
                 e.preventDefault();
                 const userQuery = inputEl.value.trim();
                 if (!userQuery || !chatSession) return;
-                
-                // FIX: Do not clear suggestions and anomalies on every submit. Let processAndDisplayMessage handle it.
-                // document.getElementById('case-trainer-suggestions').innerHTML = '';
-                // document.getElementById('case-trainer-anomalies').innerHTML = '';
                 
                 history.push({ role: 'user', parts: [{ text: userQuery }] });
                 addMessage(historyEl, 'user', userQuery, false);
