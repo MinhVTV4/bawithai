@@ -35,6 +35,9 @@
             --warning-bg: #fffbeb;
             --warning-border: #facc15;
             --warning-icon: #f59e0b;
+            --info-bg: #eff6ff;
+            --info-border: #93c5fd;
+            --info-icon: #60a5fa;
         }
         body { font-family: 'Inter', sans-serif; margin: 0; background-color: var(--main-bg); color: var(--text-dark); display: flex; height: 100vh; overflow: hidden; }
         
@@ -88,7 +91,7 @@
         .message-text p { margin-bottom: 1em; }
         .message-text ul, .message-text ol { margin-bottom: 1em; padding-left: 1.5em; }
         .message-text li { margin-bottom: 0.3em; }
-        .message-text strong { font-weight: 600; }
+        .message-text strong { font-weight: normal; }
         .message-text em { font-style: italic; }
         .message-text blockquote { border-left: 4px solid #e2e8f0; padding-left: 1em; margin-left: 0; color: #64748b; font-style: italic; }
         .message-text code { background-color: var(--btn-secondary-bg); padding: 0.2em 0.4em; border-radius: 4px; font-family: 'Courier New', Courier, monospace; font-size: 0.9em;}
@@ -116,26 +119,33 @@
         .suggestion-btn { background-color: #eef2ff; color: #4f46e5; border: 1px solid #c7d2fe; padding: 8px 16px; font-size: 0.875rem; border-radius: 16px; cursor: pointer; transition: all 0.2s ease; font-weight: 500; }
         .suggestion-btn:hover { background-color: #c7d2fe; color: #1e1b4b; transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.05); }
         
-        .anomalies-container { margin-bottom: 15px; }
-        .anomaly-item {
+        .anomalies-container, .casetype-container, .advanced-analysis-container { margin-bottom: 15px; }
+        .anomaly-item, .casetype-item {
             background-color: var(--warning-bg);
             border-left: 5px solid var(--warning-border);
             padding: 15px 20px;
             border-radius: 6px;
             display: flex;
-            align-items: flex-start;
+            align-items: center;
             gap: 15px;
             font-size: 0.9rem;
             color: #78350f;
         }
-        .anomaly-item i {
+        .casetype-item {
+             background-color: var(--info-bg);
+             border-left-color: var(--info-border);
+             color: #1e40af;
+        }
+        .anomaly-item i, .casetype-item i {
             color: var(--warning-icon);
             font-size: 1.2rem;
-            margin-top: 2px;
         }
-        .anomaly-item p { margin: 0; line-height: 1.5; }
-        .anomaly-item strong { color: #92400e; }
-        
+        .casetype-item i { color: var(--info-icon); }
+        .anomaly-item p, .casetype-item p { margin: 0; line-height: 1.5; }
+        .anomaly-item strong, .casetype-item strong { color: #92400e; }
+        .casetype-item strong { color: #1c51b9; }
+        .advanced-analysis-container select { width: 100%; padding: 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 1rem; background-color: white; }
+
         @keyframes spin { 100% { transform: rotate(360deg); } }
     </style>
 </head>
@@ -354,22 +364,24 @@
             const chartRegex = /<chart>([\s\S]*?)<\/chart>/;
             const suggestionsRegex = /<suggestions>([\s\S]*?)<\/suggestions>/;
             const anomaliesRegex = /<anomalies>([\s\S]*?)<\/anomalies>/;
+            const casetypeRegex = /<casetype>([\s\S]*?)<\/casetype>/;
 
             let textContent = fullResponseText;
             const chartMatch = textContent.match(chartRegex);
             const suggestionsMatch = textContent.match(suggestionsRegex);
             const anomaliesMatch = textContent.match(anomaliesRegex);
+            const casetypeMatch = textContent.match(casetypeRegex);
 
             if(chartMatch) textContent = textContent.replace(chartRegex, '').trim();
             if(suggestionsMatch) textContent = textContent.replace(suggestionsRegex, '').trim();
             if(anomaliesMatch) textContent = textContent.replace(anomaliesRegex, '').trim();
+            if(casetypeMatch) textContent = textContent.replace(casetypeRegex, '').trim();
             
             textEl.innerHTML = window.marked.parse(textContent);
 
             if (chartMatch && chartMatch[1]) {
                 const chartJsonString = chartMatch[1].trim();
                 try {
-                    // FIX: Remove callback functions before parsing
                     const sanitizedJson = chartJsonString.replace(/"callback":\s*function\s*\([\s\S]*?\)\s*\{[\s\S]*?\}/g, '"callback":null');
                     const chartData = JSON.parse(sanitizedJson);
                     const canvas = document.createElement('canvas');
@@ -391,6 +403,7 @@
             
             displayContentFromTag(anomaliesMatch, `${moduleId}-anomalies`, createAnomalyElement, moduleId);
             displayContentFromTag(suggestionsMatch, `${moduleId}-suggestions`, createSuggestionElement, moduleId);
+            displayContentFromTag(casetypeMatch, `${moduleId}-casetype`, createCaseTypeElement, moduleId);
         }
         
         async function streamResponseToElement(messageContainer, resultStream, moduleId) {
@@ -402,7 +415,8 @@
                 let cleanText = fullResponseText
                     .replace(/<chart>[\s\S]*?<\/chart>/, '')
                     .replace(/<suggestions>[\s\S]*?<\/suggestions>/, '')
-                    .replace(/<anomalies>[\s\S]*?<\/anomalies>/, '');
+                    .replace(/<anomalies>[\s\S]*?<\/anomalies>/, '')
+                    .replace(/<casetype>[\s\S]*?<\/casetype>/, '');
                 textEl.innerHTML = window.marked.parse(cleanText);
                 if (chatContainer) chatContainer.scrollTop = chatContainer.scrollHeight;
             }
@@ -413,14 +427,16 @@
         function displayContentFromTag(match, containerId, elementCreator, moduleId) {
              const container = document.getElementById(containerId);
              if (!container) return;
-             container.innerHTML = '';
              if (match && match[1]) {
+                container.innerHTML = '';
                 const content = match[1].trim();
                 let items = [];
                 
                 let itemTagName = 'suggestion'; 
                 if (containerId.includes('anomalies')) {
                     itemTagName = 'anomaly';
+                } else if (containerId.includes('casetype')) {
+                    itemTagName = 'casetype';
                 }
 
                 const itemRegex = new RegExp(`<${itemTagName}>(.*?)</${itemTagName}>`, 'g');
@@ -437,6 +453,10 @@
                     const element = elementCreator(itemText.trim(), moduleId);
                     container.appendChild(element);
                 });
+
+                if (containerId.includes('casetype')) {
+                    populateAdvancedAnalysisOptions(items[0].trim());
+                }
              }
         }
         
@@ -460,6 +480,42 @@
              item.className = 'anomaly-item';
              item.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i><p>${text}</p>`;
              return item;
+        }
+
+        function createCaseTypeElement(text) {
+            const item = document.createElement('div');
+            item.className = 'casetype-item';
+            item.innerHTML = `<i class="fa-solid fa-lightbulb"></i><p><strong>Loại Case được phát hiện:</strong> ${text}</p>`;
+            return item;
+        }
+
+        function populateAdvancedAnalysisOptions(caseType) {
+            const container = document.getElementById('advanced-analysis-container');
+            const select = document.getElementById('advanced-analysis-select');
+            if (!container || !select) return;
+
+            const options = {
+                'Financial Analysis': ['Phân tích Tỷ suất Lợi nhuận', 'Phân tích Dòng tiền', 'Phân tích Cấu trúc Vốn'],
+                'Sales Performance': ['Phân tích Hiệu suất Bán hàng theo Khu vực', 'Phân tích Sản phẩm Bán chạy nhất', 'Phân tích Tỷ lệ Chuyển đổi'],
+                'Marketing Analysis': ['Phân tích Kênh Marketing Hiệu quả', 'Phân tích Phân khúc Khách hàng'],
+                'Operational Efficiency': ['Phân tích Vòng quay Hàng tồn kho', 'Phân tích Hiệu suất Sản xuất']
+            };
+
+            const relevantOptions = options[caseType] || [];
+            
+            select.innerHTML = '<option value="" disabled selected>Chọn một phân tích nâng cao...</option>';
+
+            if (relevantOptions.length > 0) {
+                relevantOptions.forEach(opt => {
+                    const optionEl = document.createElement('option');
+                    optionEl.value = opt;
+                    optionEl.textContent = opt;
+                    select.appendChild(optionEl);
+                });
+                container.style.display = 'block';
+            } else {
+                container.style.display = 'none';
+            }
         }
         
         function setupNavigation() {
@@ -547,6 +603,7 @@
             const fileUploadText = document.getElementById('file-upload-text');
             const analyzeBtn = document.getElementById('analyzeFileButton');
             const langGroup = document.getElementById('case-trainer-language-btn-group');
+            const advancedSelect = document.getElementById('advanced-analysis-select');
             let history = [];
             let chatSession = null;
             let selectedLanguage = 'vietnamese';
@@ -563,6 +620,8 @@
                 historyEl.innerHTML = '';
                 document.getElementById('case-trainer-suggestions').innerHTML = '';
                 document.getElementById('case-trainer-anomalies').innerHTML = '';
+                document.getElementById('case-trainer-casetype').innerHTML = '';
+                document.getElementById('advanced-analysis-container').style.display = 'none';
 
                 const data = docSnapshot.data();
                 history = getValidHistoryForChat((data && data.history) ? data.history : []);
@@ -634,9 +693,10 @@
                     ---END DATA---
                     
                     Perform the following steps in order, using ${selectedLanguage} for all text output:
-                    1.  **Summarize:** Provide a brief summary, key observations, and 3 open-ended questions for discussion.
-                    2.  **Detect Anomalies:** Analyze the data to find 2-3 significant anomalies, red flags, or unexpected patterns (e.g., sudden spikes/drops, unusual ratios). Enclose this list within <anomalies> XML tags. Each anomaly must be on a new line.
-                    3.  **Suggest Follow-ups:** Generate a list of 3-4 specific, actionable follow-up analysis suggestions. Enclose this list within <suggestions> XML tags. Each suggestion must be on a new line.
+                    1.  **Classify Case Type:** First, analyze the data and classify its primary purpose. Choose one from: Financial Analysis, Sales Performance, Marketing Analysis, Operational Efficiency, or General Data Exploration. Enclose your classification in <casetype> XML tags. Example: <casetype>Financial Analysis</casetype>.
+                    2.  **Summarize:** Provide a brief summary, key observations, and 3 open-ended questions for discussion.
+                    3.  **Detect Anomalies:** Analyze the data to find 2-3 significant anomalies, red flags, or unexpected patterns (e.g., sudden spikes/drops, unusual ratios). Enclose this list within <anomalies> XML tags. Each anomaly must be on a new line.
+                    4.  **Suggest Follow-ups:** Generate a list of 3-4 specific, actionable follow-up analysis suggestions. Enclose this list within <suggestions> XML tags. Each suggestion must be on a new line.
                     
                     **Chart Generation Rules:**
                     When the user asks to create a chart, you MUST respond with a **strictly valid, data-only JSON object** for Chart.js (v3+) enclosed in <chart> tags. The JSON must NOT contain any JavaScript functions, comments, or trailing commas. For a horizontal bar chart, use \`type: 'bar'\` and set \`options: { indexAxis: 'y' }\`.
@@ -658,8 +718,9 @@
                 const userQuery = inputEl.value.trim();
                 if (!userQuery || !chatSession) return;
                 
-                document.getElementById('case-trainer-suggestions').innerHTML = '';
-                document.getElementById('case-trainer-anomalies').innerHTML = '';
+                // FIX: Do not clear suggestions and anomalies on every submit. Let processAndDisplayMessage handle it.
+                // document.getElementById('case-trainer-suggestions').innerHTML = '';
+                // document.getElementById('case-trainer-anomalies').innerHTML = '';
                 
                 history.push({ role: 'user', parts: [{ text: userQuery }] });
                 addMessage(historyEl, 'user', userQuery, false);
@@ -678,6 +739,16 @@
                     analyzeBtn.disabled = true;
                     saveData(moduleId, { history: [] });
                 }
+            });
+            
+            advancedSelect.addEventListener('change', (e) => {
+                const selectedTopic = e.target.value;
+                if (!selectedTopic) return;
+                
+                const prompt = `Thực hiện phân tích chuyên sâu về chủ đề: "${selectedTopic}"`;
+                inputEl.value = prompt;
+                form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+                e.target.value = '';
             });
         }
 
@@ -840,7 +911,13 @@
                     <button id="analyzeFileButton" disabled style="margin-top: 20px; width: 100%;"><span>Bắt đầu Phân tích</span></button>
                  </div>
                  <div id="case-trainer-chat-section" class="chat-container" style="display: none;">
+                    <div id="case-trainer-casetype" class="casetype-container"></div>
                     <div id="case-trainer-anomalies" class="anomalies-container"></div>
+                    <div id="advanced-analysis-container" class="advanced-analysis-container" style="display: none;">
+                        <select id="advanced-analysis-select">
+                            <option value="" disabled selected>Chọn một phân tích nâng cao...</option>
+                        </select>
+                    </div>
                     <div class="chat-history" id="case-trainer-chat-history"></div>
                     <div id="case-trainer-suggestions" class="suggestions-container"></div>
                     <form id="case-trainer-chat-form" class="chat-input-form"><input type="text" id="case-trainer-chat-input" placeholder="Đặt câu hỏi hoặc yêu cầu vẽ biểu đồ..." autocomplete="off"><button type="submit">Gửi</button></form>
