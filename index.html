@@ -390,8 +390,9 @@
                 displayContentFromTag(responseObj.suggestions, `${moduleId}-suggestions`, createSuggestionElement, moduleId);
                 displayContentFromTag(responseObj.caseType, `${moduleId}-casetype`, createCaseTypeElement, moduleId);
                 
-                if (moduleId === 'case-trainer' && responseObj.chartSuggestions) {
+                if (moduleId === 'case-trainer') {
                     populateChartSuggestions(responseObj.chartSuggestions);
+                    populateAdvancedAnalysisOptions(responseObj.advancedAnalysisSuggestions);
                 }
 
 
@@ -449,19 +450,36 @@
                     container.appendChild(element);
                  }
              });
-
-             if (containerId.includes('casetype') && itemsArray.length > 0) {
-                 populateAdvancedAnalysisOptions(itemsArray[0].trim());
-             }
         }
         
-        // UPDATED: Renamed function and logic for Level 3
         function populateChartSuggestions(suggestions) {
             const select = document.getElementById('chart-suggestion-select');
             const container = document.getElementById('chart-suggestion-container');
             if (!select || !container) return;
 
-            select.innerHTML = '<option value="" disabled selected>Chọn một gợi ý phân tích bằng biểu đồ...</option>'; // Clear old options
+            select.innerHTML = '<option value="" disabled selected>Gợi ý phân tích bằng biểu đồ...</option>'; 
+
+            if (suggestions && suggestions.length > 0) {
+                suggestions.forEach(suggestion => {
+                    if(typeof suggestion === 'string' && suggestion.trim() !== '') {
+                        const option = document.createElement('option');
+                        option.value = suggestion;
+                        option.textContent = suggestion;
+                        select.appendChild(option);
+                    }
+                });
+                container.style.display = 'block';
+            } else {
+                container.style.display = 'none';
+            }
+        }
+        
+        function populateAdvancedAnalysisOptions(suggestions) {
+            const select = document.getElementById('advanced-analysis-select');
+            const container = document.getElementById('advanced-analysis-container');
+            if (!select || !container) return;
+
+            select.innerHTML = '<option value="" disabled selected>Gợi ý phân tích nâng cao...</option>';
 
             if (suggestions && suggestions.length > 0) {
                 suggestions.forEach(suggestion => {
@@ -505,35 +523,6 @@
             item.className = 'casetype-item';
             item.innerHTML = `<i class="fa-solid fa-lightbulb"></i><p><strong>Loại Case được phát hiện:</strong> ${text}</p>`;
             return item;
-        }
-
-        function populateAdvancedAnalysisOptions(caseType) {
-            const container = document.getElementById('advanced-analysis-container');
-            const select = document.getElementById('advanced-analysis-select');
-            if (!container || !select) return;
-
-            const options = {
-                'Financial Analysis': ['Phân tích Tỷ suất Lợi nhuận', 'Phân tích Dòng tiền', 'Phân tích Cấu trúc Vốn'],
-                'Sales Performance': ['Phân tích Hiệu suất Bán hàng theo Khu vực', 'Phân tích Sản phẩm Bán chạy nhất', 'Phân tích Tỷ lệ Chuyển đổi'],
-                'Marketing Analysis': ['Phân tích Kênh Marketing Hiệu quả', 'Phân tích Phân khúc Khách hàng'],
-                'Operational Efficiency': ['Phân tích Vòng quay Hàng tồn kho', 'Phân tích Hiệu suất Sản xuất']
-            };
-
-            const relevantOptions = options[caseType] || [];
-            
-            select.innerHTML = '<option value="" disabled selected>Chọn một phân tích nâng cao...</option>';
-
-            if (relevantOptions.length > 0) {
-                relevantOptions.forEach(opt => {
-                    const optionEl = document.createElement('option');
-                    optionEl.value = opt;
-                    optionEl.textContent = opt;
-                    select.appendChild(optionEl);
-                });
-                container.style.display = 'block';
-            } else {
-                container.style.display = 'none';
-            }
         }
         
         function setupNavigation() {
@@ -636,23 +625,22 @@
             });
 
             const unsub = onSnapshot(doc(db, "users", currentUser.uid, "chats", moduleId), (docSnapshot) => {
+                // *** FIX: Reset the entire UI state on every data change ***
                 historyEl.innerHTML = '';
                 document.getElementById('case-trainer-suggestions').innerHTML = '';
                 document.getElementById('case-trainer-anomalies').innerHTML = '';
                 document.getElementById('case-trainer-casetype').innerHTML = '';
+                document.getElementById('advanced-analysis-container').style.display = 'none';
+                document.getElementById('chart-suggestion-container').style.display = 'none';
                 
-                const advancedContainer = document.getElementById('advanced-analysis-container');
-                const chartContainer = document.getElementById('chart-suggestion-container');
-                advancedContainer.style.display = 'none';
-                chartContainer.style.display = 'none';
-
-
                 const data = docSnapshot.data();
                 history = getValidHistoryForChat((data && data.history) ? data.history : []);
+                
                 if (history.length > 0) {
                     chatSession = geminiModel.startChat({ history });
                     history.forEach(msg => {
                         const msgText = msg.parts[0].text;
+                        // Don't render the initial system-like prompt
                         if (msg.role !== 'user' || !msgText.startsWith('You are an expert Business Analyst assistant')) {
                            const msgContainer = addMessage(historyEl, msg.role === 'user' ? 'user' : 'model', "", false);
                            processAndDisplayMessage(msgContainer, msgText, moduleId);
@@ -710,7 +698,6 @@
                     }
                     if (!dataContext) { aiMessageContainer.querySelector('.message-text').innerHTML = "Lỗi: Không thể đọc file hoặc định dạng không được hỗ trợ."; return; }
                     
-                    // UPDATED: Prompt for Level 3
                     const initialPrompt = `You are an expert Business Analyst assistant. Your response language MUST be ${selectedLanguage}.
                     The user has uploaded the following data:
                     ---DATA---
@@ -722,11 +709,12 @@
                     - "caseType": (String) Classify the primary purpose. Choose one from: "Financial Analysis", "Sales Performance", "Marketing Analysis", "Operational Efficiency", or "General Data Exploration".
                     - "analysis": (String) A brief summary of the data, key observations, and 3 open-ended discussion questions. This string should be formatted in Markdown.
                     - "anomalies": (Array of Strings) A list of 2-3 significant anomalies or red flags found in the data.
-                    - "suggestions": (Array of Strings) A list of 3-4 specific, actionable follow-up analysis suggestions.
-                    - "chartSuggestions": (Array of Strings) A list of 3-4 concrete and valuable analysis questions that can be visualized with a chart, based on the provided data columns. For example: "Compare revenue by product category" or "Show the trend of user sign-ups over the last months".
+                    - "suggestions": (Array of Strings) A list of 3-4 specific, actionable follow-up analysis suggestions for general discussion.
+                    - "chartSuggestions": (Array of Strings) A list of concrete and valuable analysis questions that can be visualized with a chart, based on the provided data columns. Example: "Compare revenue by product category".
+                    - "advancedAnalysisSuggestions": (Array of Strings) A list of specific, in-depth analysis topics that are possible with the provided data, going beyond simple charts. Example: "Analyze the Return on Marketing Investment (ROMI)" or "Perform a customer segmentation based on purchasing behavior".
 
                     **Chart Generation Rules:**
-                    If the user later asks to create a chart, you MUST respond with a **strictly valid, data-only JSON object** for Chart.js (v3+) enclosed in <chart> tags, separate from any other text. The chart JSON must NOT contain any JavaScript functions, comments, or trailing commas. For a horizontal bar chart, use \`type: 'bar'\` and set \`options: { indexAxis: 'y' }\`.
+                    If the user later asks to create a chart, you MUST respond with a **strictly valid, data-only JSON object** for Chart.js (v3+) enclosed in <chart> tags, separate from any other text.
 
                     Now, generate the initial analysis JSON response in ${selectedLanguage}.`;
                     
@@ -768,20 +756,18 @@
                 const selectedTopic = e.target.value;
                 if (!selectedTopic) return;
                 
-                const prompt = `Thực hiện phân tích chuyên sâu về chủ đề: "${selectedTopic}"`;
-                inputEl.value = prompt;
+                inputEl.value = `Thực hiện phân tích chuyên sâu về chủ đề: "${selectedTopic}"`;
                 form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
                 e.target.value = '';
             });
 
-            // UPDATED: Event listener for the new suggestion dropdown
             chartSuggestionSelect.addEventListener('change', (e) => {
                 const selectedSuggestion = e.target.value;
                 if (!selectedSuggestion) return;
                 
                 inputEl.value = selectedSuggestion;
                 form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
-                e.target.value = ''; // Reset dropdown
+                e.target.value = '';
             });
         }
 
@@ -967,17 +953,19 @@
                  <div id="case-trainer-chat-section" class="chat-container" style="display: none;">
                     <div id="case-trainer-casetype" class="casetype-container"></div>
                     <div id="case-trainer-anomalies" class="anomalies-container"></div>
+                    
                     <div id="advanced-analysis-container" class="advanced-analysis-container" style="display: none;">
                         <select id="advanced-analysis-select">
-                            <option value="" disabled selected>Chọn một phân tích nâng cao...</option>
+                            <option value="" disabled selected>Gợi ý phân tích nâng cao...</option>
                         </select>
                     </div>
-                    <!-- UPDATED: UI for Level 3 -->
+                    
                     <div id="chart-suggestion-container" class="advanced-analysis-container" style="display: none;">
                         <select id="chart-suggestion-select">
                             <option value="" disabled selected>Gợi ý phân tích bằng biểu đồ...</option>
                         </select>
                     </div>
+                    
                     <div class="chat-history" id="case-trainer-chat-history"></div>
                     <div id="case-trainer-suggestions" class="suggestions-container"></div>
                     <form id="case-trainer-chat-form" class="chat-input-form"><input type="text" id="case-trainer-chat-input" placeholder="Đặt câu hỏi hoặc yêu cầu vẽ biểu đồ..." autocomplete="off"><button type="submit">Gửi</button></form>
