@@ -91,7 +91,7 @@
         .message-text p { margin-bottom: 1em; }
         .message-text ul, .message-text ol { margin-bottom: 1em; padding-left: 1.5em; }
         .message-text li { margin-bottom: 0.3em; }
-        .message-text strong { font-weight: normal; }
+        /* .message-text strong { font-weight: normal; } */ /* FIX: Đã bình luận dòng này để thẻ <strong> hoạt động */
         .message-text em { font-style: italic; }
         .message-text blockquote { border-left: 4px solid #e2e8f0; padding-left: 1em; margin-left: 0; color: #64748b; font-style: italic; }
         .message-text code { background-color: var(--btn-secondary-bg); padding: 0.2em 0.4em; border-radius: 4px; font-family: 'Courier New', Courier, monospace; font-size: 0.9em;}
@@ -312,17 +312,26 @@
             const docRef = doc(db, 'users', currentUser.uid, 'chats', moduleId);
             await setDoc(docRef, dataToSave, { merge: true });
         }
-
+        
+        // FIX: Sửa lại logic để đảm bảo lịch sử trò chuyện luôn hợp lệ
         function getValidHistoryForChat(history) {
-            const validHistory = [];
             if (!history || history.length === 0) return [];
+            
+            const validHistory = [];
+            let lastRole = null;
+
             for (const currentMsg of history) {
-                const lastMsg = validHistory.length > 0 ? validHistory[validHistory.length - 1] : null;
-                if (!currentMsg.role || !currentMsg.parts) continue;
-                if (lastMsg && lastMsg.role === currentMsg.role) {
+                // Bỏ qua các tin nhắn không hợp lệ
+                if (!currentMsg.role || !currentMsg.parts || !currentMsg.parts[0] || !currentMsg.parts[0].text) continue;
+
+                // Nếu vai trò của tin nhắn hiện tại giống với vai trò cuối cùng đã được thêm,
+                // hãy thay thế tin nhắn cuối cùng. Điều này ngăn chặn các vai trò bị lặp lại liên tiếp (ví dụ: user, user).
+                if (currentMsg.role === lastRole) {
                     validHistory[validHistory.length - 1] = currentMsg;
                 } else {
+                    // Ngược lại, thêm tin nhắn mới vào lịch sử.
                     validHistory.push(currentMsg);
+                    lastRole = currentMsg.role;
                 }
             }
             return validHistory;
@@ -358,27 +367,44 @@
             if (existingChart) existingChart.destroy();
             new Chart(ctx, chartData);
         }
-
+        
+        // FIX: Viết lại hàm để phân tích phản hồi JSON từ AI, giúp ổn định hơn
         async function processAndDisplayMessage(messageContainer, fullResponseText, moduleId) {
             const textEl = messageContainer.querySelector('.message-text');
             const chartRegex = /<chart>([\s\S]*?)<\/chart>/;
-            const suggestionsRegex = /<suggestions>([\s\S]*?)<\/suggestions>/;
-            const anomaliesRegex = /<anomalies>([\s\S]*?)<\/anomalies>/;
-            const casetypeRegex = /<casetype>([\s\S]*?)<\/casetype>/;
+            const chartMatch = fullResponseText.match(chartRegex);
 
-            let textContent = fullResponseText;
-            const chartMatch = textContent.match(chartRegex);
-            const suggestionsMatch = textContent.match(suggestionsRegex);
-            const anomaliesMatch = textContent.match(anomaliesRegex);
-            const casetypeMatch = textContent.match(casetypeRegex);
+            let mainContent = fullResponseText;
+            if(chartMatch) {
+                mainContent = fullResponseText.replace(chartRegex, '').trim();
+            }
 
-            if(chartMatch) textContent = textContent.replace(chartRegex, '').trim();
-            if(suggestionsMatch) textContent = textContent.replace(suggestionsRegex, '').trim();
-            if(anomaliesMatch) textContent = textContent.replace(anomaliesRegex, '').trim();
-            if(casetypeMatch) textContent = textContent.replace(casetypeRegex, '').trim();
-            
-            textEl.innerHTML = window.marked.parse(textContent);
+            // Cố gắng phân tích cú pháp nội dung chính dưới dạng JSON
+            try {
+                // Đảm bảo chỉ lấy chuỗi JSON hợp lệ, loại bỏ các ký tự thừa
+                const jsonString = mainContent.substring(mainContent.indexOf('{'), mainContent.lastIndexOf('}') + 1);
+                const responseObj = JSON.parse(jsonString);
+                
+                // Xóa các container cũ trước khi hiển thị nội dung mới
+                document.getElementById(`${moduleId}-suggestions`).innerHTML = '';
+                document.getElementById(`${moduleId}-anomalies`).innerHTML = '';
+                document.getElementById(`${moduleId}-casetype`).innerHTML = '';
 
+                if (responseObj.analysis) {
+                    textEl.innerHTML = window.marked.parse(responseObj.analysis);
+                } else {
+                    textEl.innerHTML = "Không nhận được phân tích từ AI.";
+                }
+                
+                displayContentFromTag(responseObj.anomalies, `${moduleId}-anomalies`, createAnomalyElement, moduleId);
+                displayContentFromTag(responseObj.suggestions, `${moduleId}-suggestions`, createSuggestionElement, moduleId);
+                displayContentFromTag(responseObj.caseType, `${moduleId}-casetype`, createCaseTypeElement, moduleId);
+            } catch (e) {
+                // Nếu không phải JSON (ví dụ: trong Learning Room hoặc lỗi), hiển thị dưới dạng markdown bình thường
+                textEl.innerHTML = window.marked.parse(mainContent);
+            }
+
+            // Xử lý biểu đồ nếu có
             if (chartMatch && chartMatch[1]) {
                 const chartJsonString = chartMatch[1].trim();
                 try {
@@ -395,68 +421,47 @@
                     chartContainerDiv.appendChild(canvas);
                     renderChart(canvas, chartData);
                 } catch (e) {
-                    console.error("Error parsing or rendering chart JSON:", e);
-                    console.error("Original AI-generated string that FAILED to parse:", chartJsonString);
-                    textEl.innerHTML += "\n<p><em>Lỗi: Không thể hiển thị biểu đồ do định dạng dữ liệu không hợp lệ.</em></p>";
+                    console.error("Error parsing or rendering chart JSON:", e, chartJsonString);
+                    textEl.innerHTML += "\n<p><em>Lỗi: Không thể hiển thị biểu đồ.</em></p>";
                 }
             }
-            
-            displayContentFromTag(anomaliesMatch, `${moduleId}-anomalies`, createAnomalyElement, moduleId);
-            displayContentFromTag(suggestionsMatch, `${moduleId}-suggestions`, createSuggestionElement, moduleId);
-            displayContentFromTag(casetypeMatch, `${moduleId}-casetype`, createCaseTypeElement, moduleId);
         }
         
+        // FIX: Cập nhật hàm để chỉ hiển thị văn bản thô khi stream, sau đó mới xử lý
         async function streamResponseToElement(messageContainer, resultStream, moduleId) {
             let fullResponseText = "";
             const textEl = messageContainer.querySelector('.message-text');
             const chatContainer = messageContainer.closest('.chat-history');
             for await (const chunk of resultStream) {
                 fullResponseText += chunk.text();
-                let cleanText = fullResponseText
-                    .replace(/<chart>[\s\S]*?<\/chart>/, '')
-                    .replace(/<suggestions>[\s\S]*?<\/suggestions>/, '')
-                    .replace(/<anomalies>[\s\S]*?<\/anomalies>/, '')
-                    .replace(/<casetype>[\s\S]*?<\/casetype>/, '');
-                textEl.innerHTML = window.marked.parse(cleanText);
+                // Trong khi stream, chỉ hiển thị văn bản thô để người dùng thấy phản hồi
+                textEl.textContent = fullResponseText; 
                 if (chatContainer) chatContainer.scrollTop = chatContainer.scrollHeight;
             }
+            // Sau khi stream kết thúc, xử lý toàn bộ văn bản
             await processAndDisplayMessage(messageContainer, fullResponseText, moduleId);
             return fullResponseText;
         }
 
-        function displayContentFromTag(match, containerId, elementCreator, moduleId) {
+        // FIX: Cập nhật hàm để xử lý mảng dữ liệu từ JSON
+        function displayContentFromTag(items, containerId, elementCreator, moduleId) {
              const container = document.getElementById(containerId);
-             if (!container) return;
-             if(match && match[1]) { // Only clear and update if there's new content for this tag
-                container.innerHTML = '';
-                const content = match[1].trim();
-                let items = [];
-                
-                let itemTagName = 'suggestion'; 
-                if (containerId.includes('anomalies')) {
-                    itemTagName = 'anomaly';
-                } else if (containerId.includes('casetype')) {
-                    itemTagName = 'casetype';
-                }
+             if (!container || !items) {
+                 if(container) container.innerHTML = ''; // Xóa nội dung cũ nếu không có item mới
+                 return;
+             }
+             container.innerHTML = ''; // Luôn xóa nội dung cũ trước
+             const itemsArray = Array.isArray(items) ? items : [items];
 
-                const itemRegex = new RegExp(`<${itemTagName}>(.*?)</${itemTagName}>`, 'g');
-                let itemMatch;
-                while ((itemMatch = itemRegex.exec(content)) !== null) {
-                    items.push(itemMatch[1]);
-                }
-                
-                if (items.length === 0) {
-                    items = content.split('\n').filter(s => s.trim() !== '');
-                }
-
-                items.forEach(itemText => {
+             itemsArray.forEach(itemText => {
+                 if(typeof itemText === 'string' && itemText.trim() !== ''){
                     const element = elementCreator(itemText.trim(), moduleId);
                     container.appendChild(element);
-                });
+                 }
+             });
 
-                if (containerId.includes('casetype')) {
-                    populateAdvancedAnalysisOptions(items[0].trim());
-                }
+             if (containerId.includes('casetype') && itemsArray.length > 0) {
+                 populateAdvancedAnalysisOptions(itemsArray[0].trim());
              }
         }
         
@@ -629,7 +634,7 @@
                     chatSession = geminiModel.startChat({ history });
                     history.forEach(msg => {
                         const msgText = msg.parts[0].text;
-                        if (msg.role !== 'user' || !msgText.startsWith('You are a helpful Business Analyst assistant.')) {
+                        if (msg.role !== 'user' || !msgText.startsWith('You are an expert Business Analyst assistant')) {
                            const msgContainer = addMessage(historyEl, msg.role === 'user' ? 'user' : 'model', "", false);
                            processAndDisplayMessage(msgContainer, msgText, moduleId);
                         }
@@ -686,23 +691,25 @@
                     }
                     if (!dataContext) { aiMessageContainer.querySelector('.message-text').innerHTML = "Lỗi: Không thể đọc file hoặc định dạng không được hỗ trợ."; return; }
                     
-                    const initialPrompt = `You are a helpful Business Analyst assistant. Your response language MUST be ${selectedLanguage}.
+                    // FIX: Cập nhật prompt để yêu cầu đầu ra JSON, giúp ổn định hơn.
+                    const initialPrompt = `You are an expert Business Analyst assistant. Your response language MUST be ${selectedLanguage}.
                     The user has uploaded the following data:
                     ---DATA---
                     ${dataContext}
                     ---END DATA---
-                    
-                    Perform the following steps in order, using ${selectedLanguage} for all text output:
-                    1.  **Classify Case Type:** First, analyze the data and classify its primary purpose. Choose one from: Financial Analysis, Sales Performance, Marketing Analysis, Operational Efficiency, or General Data Exploration. Enclose your classification in <casetype> XML tags. Example: <casetype>Financial Analysis</casetype>.
-                    2.  **Summarize:** Provide a brief summary, key observations, and 3 open-ended questions for discussion.
-                    3.  **Detect Anomalies:** Analyze the data to find 2-3 significant anomalies, red flags, or unexpected patterns (e.g., sudden spikes/drops, unusual ratios). Enclose this list within <anomalies> XML tags. Each anomaly must be on a new line.
-                    4.  **Suggest Follow-ups:** Generate a list of 3-4 specific, actionable follow-up analysis suggestions. Enclose this list within <suggestions> XML tags. Each suggestion must be on a new line.
-                    
-                    **Chart Generation Rules:**
-                    When the user asks to create a chart, you MUST respond with a **strictly valid, data-only JSON object** for Chart.js (v3+) enclosed in <chart> tags. The JSON must NOT contain any JavaScript functions, comments, or trailing commas. For a horizontal bar chart, use \`type: 'bar'\` and set \`options: { indexAxis: 'y' }\`.
-                    
-                    Now, begin your response in ${selectedLanguage}.`;
 
+                    Your entire response MUST be a single, valid, data-only JSON object, with no surrounding text, markdown, or language indicators.
+                    The JSON object must have the following keys:
+                    - "caseType": (String) Classify the primary purpose. Choose one from: "Financial Analysis", "Sales Performance", "Marketing Analysis", "Operational Efficiency", or "General Data Exploration".
+                    - "analysis": (String) A brief summary of the data, key observations, and 3 open-ended discussion questions. This string should be formatted in Markdown.
+                    - "anomalies": (Array of Strings) A list of 2-3 significant anomalies or red flags found in the data.
+                    - "suggestions": (Array of Strings) A list of 3-4 specific, actionable follow-up analysis suggestions.
+
+                    **Chart Generation Rules:**
+                    If the user later asks to create a chart, you MUST respond with a **strictly valid, data-only JSON object** for Chart.js (v3+) enclosed in <chart> tags, separate from any other text. The chart JSON must NOT contain any JavaScript functions, comments, or trailing commas. For a horizontal bar chart, use \`type: 'bar'\` and set \`options: { indexAxis: 'y' }\`.
+
+                    Now, generate the initial analysis JSON response in ${selectedLanguage}.`;
+                    
                     chatSession = geminiModel.startChat();
                     const result = await chatSession.sendMessageStream(initialPrompt);
                     const fullResponseText = await streamResponseToElement(aiMessageContainer, result.stream, moduleId);
@@ -761,7 +768,18 @@
             const topicGroup = document.getElementById('topic-btn-group');
             let sessionState = { history: [], language: 'vietnamese', topic: null, inProgress: false };
             let chatSession = null;
+
+            // FIX: Cải thiện chức năng đọc văn bản
             const speech = window.speechSynthesis;
+            let voices = [];
+            function populateVoiceList() {
+                if (typeof speechSynthesis === 'undefined') return;
+                voices = speechSynthesis.getVoices();
+            }
+            populateVoiceList();
+            if (typeof speechSynthesis !== 'undefined' && speechSynthesis.onvoiceschanged !== undefined) {
+                speechSynthesis.onvoiceschanged = populateVoiceList;
+            }
 
             const unsub = onSnapshot(doc(db, "users", currentUser.uid, "chats", moduleId), (docSnapshot) => {
                 historyEl.innerHTML = '';
@@ -866,17 +884,30 @@
                 speakBtn.innerHTML = '<i class="fa-solid fa-volume-high"></i>';
                 speakBtn.onclick = (e) => {
                     e.stopPropagation();
-                    speakText(messageDiv.querySelector('.message-text').innerText, lang);
+                    const textToSpeak = messageDiv.querySelector('.message-text').innerText;
+                    speakText(textToSpeak, lang);
                 }
                 const textSpan = messageDiv.querySelector('.message-text');
                 textSpan.insertAdjacentElement('afterend', speakBtn);
             }
             
+            // FIX: Cập nhật hàm để chọn giọng đọc tốt hơn
             function speakText(text, lang) {
                 if (!speech || !text) return;
                 const utterance = new SpeechSynthesisUtterance(text);
-                utterance.lang = lang === 'vietnamese' ? 'vi-VN' : 'en-US';
-                speech.cancel();
+                const targetLang = lang === 'vietnamese' ? 'vi-VN' : 'en-US';
+                utterance.lang = targetLang;
+
+                // Cố gắng tìm một giọng đọc chất lượng cao
+                let voice = voices.find(v => v.lang === targetLang && v.name.includes('Google'));
+                if (!voice) {
+                    voice = voices.find(v => v.lang === targetLang);
+                }
+                if (voice) {
+                    utterance.voice = voice;
+                }
+                
+                speech.cancel(); // Dừng bất kỳ lần đọc nào trước đó
                 speech.speak(utterance);
             }
         }
