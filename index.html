@@ -91,7 +91,6 @@
         .message-text p { margin-bottom: 1em; }
         .message-text ul, .message-text ol { margin-bottom: 1em; padding-left: 1.5em; }
         .message-text li { margin-bottom: 0.3em; }
-        /* .message-text strong { font-weight: normal; } */ /* FIX: Đã bình luận dòng này để thẻ <strong> hoạt động */
         .message-text em { font-style: italic; }
         .message-text blockquote { border-left: 4px solid #e2e8f0; padding-left: 1em; margin-left: 0; color: #64748b; font-style: italic; }
         .message-text code { background-color: var(--btn-secondary-bg); padding: 0.2em 0.4em; border-radius: 4px; font-family: 'Courier New', Courier, monospace; font-size: 0.9em;}
@@ -313,7 +312,6 @@
             await setDoc(docRef, dataToSave, { merge: true });
         }
         
-        // FIX: Sửa lại logic để đảm bảo lịch sử trò chuyện luôn hợp lệ
         function getValidHistoryForChat(history) {
             if (!history || history.length === 0) return [];
             
@@ -321,15 +319,11 @@
             let lastRole = null;
 
             for (const currentMsg of history) {
-                // Bỏ qua các tin nhắn không hợp lệ
                 if (!currentMsg.role || !currentMsg.parts || !currentMsg.parts[0] || !currentMsg.parts[0].text) continue;
 
-                // Nếu vai trò của tin nhắn hiện tại giống với vai trò cuối cùng đã được thêm,
-                // hãy thay thế tin nhắn cuối cùng. Điều này ngăn chặn các vai trò bị lặp lại liên tiếp (ví dụ: user, user).
                 if (currentMsg.role === lastRole) {
                     validHistory[validHistory.length - 1] = currentMsg;
                 } else {
-                    // Ngược lại, thêm tin nhắn mới vào lịch sử.
                     validHistory.push(currentMsg);
                     lastRole = currentMsg.role;
                 }
@@ -368,7 +362,6 @@
             new Chart(ctx, chartData);
         }
         
-        // FIX: Viết lại hàm để phân tích phản hồi JSON từ AI, giúp ổn định hơn
         async function processAndDisplayMessage(messageContainer, fullResponseText, moduleId) {
             const textEl = messageContainer.querySelector('.message-text');
             const chartRegex = /<chart>([\s\S]*?)<\/chart>/;
@@ -379,13 +372,10 @@
                 mainContent = fullResponseText.replace(chartRegex, '').trim();
             }
 
-            // Cố gắng phân tích cú pháp nội dung chính dưới dạng JSON
             try {
-                // Đảm bảo chỉ lấy chuỗi JSON hợp lệ, loại bỏ các ký tự thừa
                 const jsonString = mainContent.substring(mainContent.indexOf('{'), mainContent.lastIndexOf('}') + 1);
                 const responseObj = JSON.parse(jsonString);
                 
-                // Xóa các container cũ trước khi hiển thị nội dung mới
                 document.getElementById(`${moduleId}-suggestions`).innerHTML = '';
                 document.getElementById(`${moduleId}-anomalies`).innerHTML = '';
                 document.getElementById(`${moduleId}-casetype`).innerHTML = '';
@@ -399,12 +389,16 @@
                 displayContentFromTag(responseObj.anomalies, `${moduleId}-anomalies`, createAnomalyElement, moduleId);
                 displayContentFromTag(responseObj.suggestions, `${moduleId}-suggestions`, createSuggestionElement, moduleId);
                 displayContentFromTag(responseObj.caseType, `${moduleId}-casetype`, createCaseTypeElement, moduleId);
+                
+                // ADDED: Call the function to update the chart menu based on context
+                if (moduleId === 'case-trainer' && responseObj.caseType) {
+                    updateChartMenu(responseObj.caseType);
+                }
+
             } catch (e) {
-                // Nếu không phải JSON (ví dụ: trong Learning Room hoặc lỗi), hiển thị dưới dạng markdown bình thường
                 textEl.innerHTML = window.marked.parse(mainContent);
             }
 
-            // Xử lý biểu đồ nếu có
             if (chartMatch && chartMatch[1]) {
                 const chartJsonString = chartMatch[1].trim();
                 try {
@@ -427,30 +421,26 @@
             }
         }
         
-        // FIX: Cập nhật hàm để chỉ hiển thị văn bản thô khi stream, sau đó mới xử lý
         async function streamResponseToElement(messageContainer, resultStream, moduleId) {
             let fullResponseText = "";
             const textEl = messageContainer.querySelector('.message-text');
             const chatContainer = messageContainer.closest('.chat-history');
             for await (const chunk of resultStream) {
                 fullResponseText += chunk.text();
-                // Trong khi stream, chỉ hiển thị văn bản thô để người dùng thấy phản hồi
                 textEl.textContent = fullResponseText; 
                 if (chatContainer) chatContainer.scrollTop = chatContainer.scrollHeight;
             }
-            // Sau khi stream kết thúc, xử lý toàn bộ văn bản
             await processAndDisplayMessage(messageContainer, fullResponseText, moduleId);
             return fullResponseText;
         }
 
-        // FIX: Cập nhật hàm để xử lý mảng dữ liệu từ JSON
         function displayContentFromTag(items, containerId, elementCreator, moduleId) {
              const container = document.getElementById(containerId);
              if (!container || !items) {
-                 if(container) container.innerHTML = ''; // Xóa nội dung cũ nếu không có item mới
+                 if(container) container.innerHTML = '';
                  return;
              }
-             container.innerHTML = ''; // Luôn xóa nội dung cũ trước
+             container.innerHTML = '';
              const itemsArray = Array.isArray(items) ? items : [items];
 
              itemsArray.forEach(itemText => {
@@ -463,6 +453,39 @@
              if (containerId.includes('casetype') && itemsArray.length > 0) {
                  populateAdvancedAnalysisOptions(itemsArray[0].trim());
              }
+        }
+
+        // ADDED: Function to update chart suggestions based on case type
+        function updateChartMenu(caseType) {
+            const chartSelect = document.getElementById('chart-type-select');
+            if (!chartSelect) return;
+
+            const recommendations = {
+                'Financial Analysis': ['bar', 'line'],
+                'Sales Performance': ['line', 'bar', 'pie'],
+                'Marketing Analysis': ['pie', 'bar'],
+                'Operational Efficiency': ['bar', 'line'],
+                'General Data Exploration': ['bar', 'pie', 'line']
+            };
+
+            const recommendedCharts = recommendations[caseType] || [];
+
+            for (const option of chartSelect.options) {
+                if (option.value === "") continue; // Skip the disabled placeholder
+
+                // Store original text if not already stored
+                if (!option.dataset.originalText) {
+                    option.dataset.originalText = option.textContent;
+                }
+                
+                // Reset to original text first
+                option.textContent = option.dataset.originalText;
+                
+                // Prepend a star if recommended
+                if (recommendedCharts.includes(option.value)) {
+                    option.textContent = `⭐ ${option.dataset.originalText}`;
+                }
+            }
         }
         
         function createSuggestionElement(text, moduleId) {
@@ -609,7 +632,7 @@
             const analyzeBtn = document.getElementById('analyzeFileButton');
             const langGroup = document.getElementById('case-trainer-language-btn-group');
             const advancedSelect = document.getElementById('advanced-analysis-select');
-            const chartSelect = document.getElementById('chart-type-select'); // ADDED: Get chart select element
+            const chartSelect = document.getElementById('chart-type-select');
             let history = [];
             let chatSession = null;
             let selectedLanguage = 'vietnamese';
@@ -647,7 +670,7 @@
                     });
                     uploadSection.style.display = 'none';
                     chatSection.style.display = 'block';
-                    chartContainer.style.display = 'block'; // ADDED: Show chart dropdown
+                    chartContainer.style.display = 'block';
                 } else {
                     uploadSection.style.display = 'block';
                     chatSection.style.display = 'none';
@@ -698,7 +721,6 @@
                     }
                     if (!dataContext) { aiMessageContainer.querySelector('.message-text').innerHTML = "Lỗi: Không thể đọc file hoặc định dạng không được hỗ trợ."; return; }
                     
-                    // FIX: Cập nhật prompt để yêu cầu đầu ra JSON, giúp ổn định hơn.
                     const initialPrompt = `You are an expert Business Analyst assistant. Your response language MUST be ${selectedLanguage}.
                     The user has uploaded the following data:
                     ---DATA---
@@ -761,26 +783,45 @@
                 e.target.value = '';
             });
 
-            // ADDED: Event listener for the new chart dropdown
             chartSelect.addEventListener('change', (e) => {
                 const selectedChart = e.target.value;
                 if (!selectedChart) return;
 
-                let chartName = '';
+                let prompt = '';
+                const isVietnamese = selectedLanguage === 'vietnamese';
+
                 switch(selectedChart) {
-                    case 'bar': chartName = selectedLanguage === 'vietnamese' ? 'cột' : 'bar'; break;
-                    case 'horizontalBar': chartName = selectedLanguage === 'vietnamese' ? 'cột ngang' : 'horizontal bar'; break;
-                    case 'pie': chartName = selectedLanguage === 'vietnamese' ? 'tròn' : 'pie'; break;
-                    case 'line': chartName = selectedLanguage === 'vietnamese' ? 'đường' : 'line'; break;
-                    case 'doughnut': chartName = selectedLanguage === 'vietnamese' ? 'vành khuyên' : 'doughnut'; break;
+                    case 'bar':
+                        prompt = isVietnamese
+                            ? "Hãy tạo một biểu đồ cột để so sánh giá trị của một danh mục cụ thể (ví dụ: so sánh doanh thu theo từng sản phẩm)."
+                            : "Generate a bar chart to compare the values of a specific category (e.g., comparing revenue by product).";
+                        break;
+                    case 'horizontalBar':
+                         prompt = isVietnamese
+                            ? "Hãy tạo một biểu đồ cột ngang để so sánh các hạng mục, đặc biệt hữu ích khi có nhiều danh mục hoặc tên danh mục dài."
+                            : "Generate a horizontal bar chart to compare items, which is useful for many categories or long category names.";
+                        break;
+                    case 'pie':
+                        prompt = isVietnamese
+                            ? "Hãy tạo một biểu đồ tròn để phân tích tỷ trọng, cơ cấu của các thành phần trong một tổng thể (ví dụ: tỷ trọng doanh thu theo từng khu vực)."
+                            : "Generate a pie chart to analyze the proportion or structure of components within a whole (e.g., revenue share by region).";
+                        break;
+                    case 'line':
+                        prompt = isVietnamese
+                            ? "Hãy tạo một biểu đồ đường để thể hiện xu hướng của một chỉ số theo thời gian."
+                            : "Generate a line chart to show the trend of a metric over time.";
+                        break;
+                    case 'doughnut':
+                        prompt = isVietnamese
+                            ? "Hãy tạo một biểu đồ vành khuyên, tương tự biểu đồ tròn, để thể hiện cơ cấu tỷ trọng."
+                            : "Generate a doughnut chart, similar to a pie chart, to show proportional structure.";
+                        break;
                 }
 
-                const prompt = selectedLanguage === 'vietnamese'
-                    ? `Vẽ biểu đồ ${chartName} dựa trên dữ liệu đã cung cấp.`
-                    : `Generate a ${chartName} chart based on the provided data.`;
-
-                inputEl.value = prompt;
-                form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+                if (prompt) {
+                    inputEl.value = prompt;
+                    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+                }
                 e.target.value = ''; // Reset dropdown after selection
             });
         }
@@ -799,7 +840,6 @@
             let sessionState = { history: [], language: 'vietnamese', topic: null, inProgress: false };
             let chatSession = null;
 
-            // FIX: Cải thiện chức năng đọc văn bản
             const speech = window.speechSynthesis;
             let voices = [];
             function populateVoiceList() {
@@ -921,14 +961,12 @@
                 textSpan.insertAdjacentElement('afterend', speakBtn);
             }
             
-            // FIX: Cập nhật hàm để chọn giọng đọc tốt hơn
             function speakText(text, lang) {
                 if (!speech || !text) return;
                 const utterance = new SpeechSynthesisUtterance(text);
                 const targetLang = lang === 'vietnamese' ? 'vi-VN' : 'en-US';
                 utterance.lang = targetLang;
 
-                // Cố gắng tìm một giọng đọc chất lượng cao
                 let voice = voices.find(v => v.lang === targetLang && v.name.includes('Google'));
                 if (!voice) {
                     voice = voices.find(v => v.lang === targetLang);
@@ -937,7 +975,7 @@
                     utterance.voice = voice;
                 }
                 
-                speech.cancel(); // Dừng bất kỳ lần đọc nào trước đó
+                speech.cancel();
                 speech.speak(utterance);
             }
         }
@@ -975,15 +1013,14 @@
                             <option value="" disabled selected>Chọn một phân tích nâng cao...</option>
                         </select>
                     </div>
-                    <!-- ADDED: Chart type selection dropdown -->
                     <div id="chart-selection-container" class="advanced-analysis-container" style="display: none;">
                         <select id="chart-type-select">
                             <option value="" disabled selected>Hoặc, chọn nhanh một loại biểu đồ...</option>
-                            <option value="bar">Biểu đồ cột</option>
-                            <option value="horizontalBar">Biểu đồ cột ngang</option>
-                            <option value="pie">Biểu đồ tròn</option>
-                            <option value="line">Biểu đồ đường</option>
-                            <option value="doughnut">Biểu đồ vành khuyên</option>
+                            <option value="bar">Biểu đồ cột (So sánh)</option>
+                            <option value="horizontalBar">Biểu đồ cột ngang (So sánh)</option>
+                            <option value="pie">Biểu đồ tròn (Tỷ trọng)</option>
+                            <option value="line">Biểu đồ đường (Xu hướng)</option>
+                            <option value="doughnut">Biểu đồ vành khuyên (Tỷ trọng)</option>
                         </select>
                     </div>
                     <div class="chat-history" id="case-trainer-chat-history"></div>
