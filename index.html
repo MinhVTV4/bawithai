@@ -609,6 +609,7 @@
             const analyzeBtn = document.getElementById('analyzeFileButton');
             const langGroup = document.getElementById('case-trainer-language-btn-group');
             const advancedSelect = document.getElementById('advanced-analysis-select');
+            const chartSelect = document.getElementById('chart-type-select'); // ADDED: Get chart select element
             let history = [];
             let chatSession = null;
             let selectedLanguage = 'vietnamese';
@@ -626,7 +627,12 @@
                 document.getElementById('case-trainer-suggestions').innerHTML = '';
                 document.getElementById('case-trainer-anomalies').innerHTML = '';
                 document.getElementById('case-trainer-casetype').innerHTML = '';
-                document.getElementById('advanced-analysis-container').style.display = 'none';
+                
+                const advancedContainer = document.getElementById('advanced-analysis-container');
+                const chartContainer = document.getElementById('chart-selection-container');
+                advancedContainer.style.display = 'none';
+                chartContainer.style.display = 'none';
+
 
                 const data = docSnapshot.data();
                 history = getValidHistoryForChat((data && data.history) ? data.history : []);
@@ -641,6 +647,7 @@
                     });
                     uploadSection.style.display = 'none';
                     chatSection.style.display = 'block';
+                    chartContainer.style.display = 'block'; // ADDED: Show chart dropdown
                 } else {
                     uploadSection.style.display = 'block';
                     chatSection.style.display = 'none';
@@ -752,6 +759,29 @@
                 inputEl.value = prompt;
                 form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
                 e.target.value = '';
+            });
+
+            // ADDED: Event listener for the new chart dropdown
+            chartSelect.addEventListener('change', (e) => {
+                const selectedChart = e.target.value;
+                if (!selectedChart) return;
+
+                let chartName = '';
+                switch(selectedChart) {
+                    case 'bar': chartName = selectedLanguage === 'vietnamese' ? 'cột' : 'bar'; break;
+                    case 'horizontalBar': chartName = selectedLanguage === 'vietnamese' ? 'cột ngang' : 'horizontal bar'; break;
+                    case 'pie': chartName = selectedLanguage === 'vietnamese' ? 'tròn' : 'pie'; break;
+                    case 'line': chartName = selectedLanguage === 'vietnamese' ? 'đường' : 'line'; break;
+                    case 'doughnut': chartName = selectedLanguage === 'vietnamese' ? 'vành khuyên' : 'doughnut'; break;
+                }
+
+                const prompt = selectedLanguage === 'vietnamese'
+                    ? `Vẽ biểu đồ ${chartName} dựa trên dữ liệu đã cung cấp.`
+                    : `Generate a ${chartName} chart based on the provided data.`;
+
+                inputEl.value = prompt;
+                form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+                e.target.value = ''; // Reset dropdown after selection
             });
         }
 
@@ -943,6 +973,17 @@
                     <div id="advanced-analysis-container" class="advanced-analysis-container" style="display: none;">
                         <select id="advanced-analysis-select">
                             <option value="" disabled selected>Chọn một phân tích nâng cao...</option>
+                        </select>
+                    </div>
+                    <!-- ADDED: Chart type selection dropdown -->
+                    <div id="chart-selection-container" class="advanced-analysis-container" style="display: none;">
+                        <select id="chart-type-select">
+                            <option value="" disabled selected>Hoặc, chọn nhanh một loại biểu đồ...</option>
+                            <option value="bar">Biểu đồ cột</option>
+                            <option value="horizontalBar">Biểu đồ cột ngang</option>
+                            <option value="pie">Biểu đồ tròn</option>
+                            <option value="line">Biểu đồ đường</option>
+                            <option value="doughnut">Biểu đồ vành khuyên</option>
                         </select>
                     </div>
                     <div class="chat-history" id="case-trainer-chat-history"></div>
