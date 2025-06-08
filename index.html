@@ -376,10 +376,6 @@
                 const jsonString = mainContent.substring(mainContent.indexOf('{'), mainContent.lastIndexOf('}') + 1);
                 const responseObj = JSON.parse(jsonString);
                 
-                document.getElementById(`${moduleId}-suggestions`).innerHTML = '';
-                document.getElementById(`${moduleId}-anomalies`).innerHTML = '';
-                document.getElementById(`${moduleId}-casetype`).innerHTML = '';
-
                 if (responseObj.analysis) {
                     textEl.innerHTML = window.marked.parse(responseObj.analysis);
                 } else {
@@ -403,8 +399,13 @@
             if (chartMatch && chartMatch[1]) {
                 const chartJsonString = chartMatch[1].trim();
                 try {
-                    const sanitizedJson = chartJsonString.replace(/"callback":\s*function\s*\([\s\S]*?\)\s*\{[\s\S]*?\}/g, '"callback":null');
-                    const chartData = JSON.parse(sanitizedJson);
+                    // FIX: Make JSON sanitization more robust
+                    let sanitized = chartJsonString
+                        .replace(/'/g, '"') // Replace single quotes with double quotes
+                        .replace(/,(\s*[}\]])/g, '$1') // Remove trailing commas
+                        .replace(/\/\*[\s\S]*?\*\/|\/\/.*/g, ''); // Remove comments
+                    
+                    const chartData = JSON.parse(sanitized);
                     const canvas = document.createElement('canvas');
                     let chartContainerDiv = messageContainer.querySelector('.chart-container');
                     if (!chartContainerDiv) {
@@ -625,7 +626,6 @@
             });
 
             const unsub = onSnapshot(doc(db, "users", currentUser.uid, "chats", moduleId), (docSnapshot) => {
-                // *** FIX: Reset the entire UI state on every data change ***
                 historyEl.innerHTML = '';
                 document.getElementById('case-trainer-suggestions').innerHTML = '';
                 document.getElementById('case-trainer-anomalies').innerHTML = '';
@@ -640,7 +640,6 @@
                     chatSession = geminiModel.startChat({ history });
                     history.forEach(msg => {
                         const msgText = msg.parts[0].text;
-                        // Don't render the initial system-like prompt
                         if (msg.role !== 'user' || !msgText.startsWith('You are an expert Business Analyst assistant')) {
                            const msgContainer = addMessage(historyEl, msg.role === 'user' ? 'user' : 'model', "", false);
                            processAndDisplayMessage(msgContainer, msgText, moduleId);
