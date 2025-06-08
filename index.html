@@ -390,10 +390,10 @@
                 displayContentFromTag(responseObj.suggestions, `${moduleId}-suggestions`, createSuggestionElement, moduleId);
                 displayContentFromTag(responseObj.caseType, `${moduleId}-casetype`, createCaseTypeElement, moduleId);
                 
-                // ADDED: Call the function to update the chart menu based on context
-                if (moduleId === 'case-trainer' && responseObj.caseType) {
-                    updateChartMenu(responseObj.caseType);
+                if (moduleId === 'case-trainer' && responseObj.chartSuggestions) {
+                    populateChartSuggestions(responseObj.chartSuggestions);
                 }
+
 
             } catch (e) {
                 textEl.innerHTML = window.marked.parse(mainContent);
@@ -454,37 +454,27 @@
                  populateAdvancedAnalysisOptions(itemsArray[0].trim());
              }
         }
+        
+        // UPDATED: Renamed function and logic for Level 3
+        function populateChartSuggestions(suggestions) {
+            const select = document.getElementById('chart-suggestion-select');
+            const container = document.getElementById('chart-suggestion-container');
+            if (!select || !container) return;
 
-        // ADDED: Function to update chart suggestions based on case type
-        function updateChartMenu(caseType) {
-            const chartSelect = document.getElementById('chart-type-select');
-            if (!chartSelect) return;
+            select.innerHTML = '<option value="" disabled selected>Chọn một gợi ý phân tích bằng biểu đồ...</option>'; // Clear old options
 
-            const recommendations = {
-                'Financial Analysis': ['bar', 'line'],
-                'Sales Performance': ['line', 'bar', 'pie'],
-                'Marketing Analysis': ['pie', 'bar'],
-                'Operational Efficiency': ['bar', 'line'],
-                'General Data Exploration': ['bar', 'pie', 'line']
-            };
-
-            const recommendedCharts = recommendations[caseType] || [];
-
-            for (const option of chartSelect.options) {
-                if (option.value === "") continue; // Skip the disabled placeholder
-
-                // Store original text if not already stored
-                if (!option.dataset.originalText) {
-                    option.dataset.originalText = option.textContent;
-                }
-                
-                // Reset to original text first
-                option.textContent = option.dataset.originalText;
-                
-                // Prepend a star if recommended
-                if (recommendedCharts.includes(option.value)) {
-                    option.textContent = `⭐ ${option.dataset.originalText}`;
-                }
+            if (suggestions && suggestions.length > 0) {
+                suggestions.forEach(suggestion => {
+                    if(typeof suggestion === 'string' && suggestion.trim() !== '') {
+                        const option = document.createElement('option');
+                        option.value = suggestion;
+                        option.textContent = suggestion;
+                        select.appendChild(option);
+                    }
+                });
+                container.style.display = 'block';
+            } else {
+                container.style.display = 'none';
             }
         }
         
@@ -632,7 +622,7 @@
             const analyzeBtn = document.getElementById('analyzeFileButton');
             const langGroup = document.getElementById('case-trainer-language-btn-group');
             const advancedSelect = document.getElementById('advanced-analysis-select');
-            const chartSelect = document.getElementById('chart-type-select');
+            const chartSuggestionSelect = document.getElementById('chart-suggestion-select');
             let history = [];
             let chatSession = null;
             let selectedLanguage = 'vietnamese';
@@ -652,7 +642,7 @@
                 document.getElementById('case-trainer-casetype').innerHTML = '';
                 
                 const advancedContainer = document.getElementById('advanced-analysis-container');
-                const chartContainer = document.getElementById('chart-selection-container');
+                const chartContainer = document.getElementById('chart-suggestion-container');
                 advancedContainer.style.display = 'none';
                 chartContainer.style.display = 'none';
 
@@ -670,7 +660,6 @@
                     });
                     uploadSection.style.display = 'none';
                     chatSection.style.display = 'block';
-                    chartContainer.style.display = 'block';
                 } else {
                     uploadSection.style.display = 'block';
                     chatSection.style.display = 'none';
@@ -721,6 +710,7 @@
                     }
                     if (!dataContext) { aiMessageContainer.querySelector('.message-text').innerHTML = "Lỗi: Không thể đọc file hoặc định dạng không được hỗ trợ."; return; }
                     
+                    // UPDATED: Prompt for Level 3
                     const initialPrompt = `You are an expert Business Analyst assistant. Your response language MUST be ${selectedLanguage}.
                     The user has uploaded the following data:
                     ---DATA---
@@ -733,6 +723,7 @@
                     - "analysis": (String) A brief summary of the data, key observations, and 3 open-ended discussion questions. This string should be formatted in Markdown.
                     - "anomalies": (Array of Strings) A list of 2-3 significant anomalies or red flags found in the data.
                     - "suggestions": (Array of Strings) A list of 3-4 specific, actionable follow-up analysis suggestions.
+                    - "chartSuggestions": (Array of Strings) A list of 3-4 concrete and valuable analysis questions that can be visualized with a chart, based on the provided data columns. For example: "Compare revenue by product category" or "Show the trend of user sign-ups over the last months".
 
                     **Chart Generation Rules:**
                     If the user later asks to create a chart, you MUST respond with a **strictly valid, data-only JSON object** for Chart.js (v3+) enclosed in <chart> tags, separate from any other text. The chart JSON must NOT contain any JavaScript functions, comments, or trailing commas. For a horizontal bar chart, use \`type: 'bar'\` and set \`options: { indexAxis: 'y' }\`.
@@ -783,46 +774,14 @@
                 e.target.value = '';
             });
 
-            chartSelect.addEventListener('change', (e) => {
-                const selectedChart = e.target.value;
-                if (!selectedChart) return;
-
-                let prompt = '';
-                const isVietnamese = selectedLanguage === 'vietnamese';
-
-                switch(selectedChart) {
-                    case 'bar':
-                        prompt = isVietnamese
-                            ? "Hãy tạo một biểu đồ cột để so sánh giá trị của một danh mục cụ thể (ví dụ: so sánh doanh thu theo từng sản phẩm)."
-                            : "Generate a bar chart to compare the values of a specific category (e.g., comparing revenue by product).";
-                        break;
-                    case 'horizontalBar':
-                         prompt = isVietnamese
-                            ? "Hãy tạo một biểu đồ cột ngang để so sánh các hạng mục, đặc biệt hữu ích khi có nhiều danh mục hoặc tên danh mục dài."
-                            : "Generate a horizontal bar chart to compare items, which is useful for many categories or long category names.";
-                        break;
-                    case 'pie':
-                        prompt = isVietnamese
-                            ? "Hãy tạo một biểu đồ tròn để phân tích tỷ trọng, cơ cấu của các thành phần trong một tổng thể (ví dụ: tỷ trọng doanh thu theo từng khu vực)."
-                            : "Generate a pie chart to analyze the proportion or structure of components within a whole (e.g., revenue share by region).";
-                        break;
-                    case 'line':
-                        prompt = isVietnamese
-                            ? "Hãy tạo một biểu đồ đường để thể hiện xu hướng của một chỉ số theo thời gian."
-                            : "Generate a line chart to show the trend of a metric over time.";
-                        break;
-                    case 'doughnut':
-                        prompt = isVietnamese
-                            ? "Hãy tạo một biểu đồ vành khuyên, tương tự biểu đồ tròn, để thể hiện cơ cấu tỷ trọng."
-                            : "Generate a doughnut chart, similar to a pie chart, to show proportional structure.";
-                        break;
-                }
-
-                if (prompt) {
-                    inputEl.value = prompt;
-                    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
-                }
-                e.target.value = ''; // Reset dropdown after selection
+            // UPDATED: Event listener for the new suggestion dropdown
+            chartSuggestionSelect.addEventListener('change', (e) => {
+                const selectedSuggestion = e.target.value;
+                if (!selectedSuggestion) return;
+                
+                inputEl.value = selectedSuggestion;
+                form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+                e.target.value = ''; // Reset dropdown
             });
         }
 
@@ -1013,14 +972,10 @@
                             <option value="" disabled selected>Chọn một phân tích nâng cao...</option>
                         </select>
                     </div>
-                    <div id="chart-selection-container" class="advanced-analysis-container" style="display: none;">
-                        <select id="chart-type-select">
-                            <option value="" disabled selected>Hoặc, chọn nhanh một loại biểu đồ...</option>
-                            <option value="bar">Biểu đồ cột (So sánh)</option>
-                            <option value="horizontalBar">Biểu đồ cột ngang (So sánh)</option>
-                            <option value="pie">Biểu đồ tròn (Tỷ trọng)</option>
-                            <option value="line">Biểu đồ đường (Xu hướng)</option>
-                            <option value="doughnut">Biểu đồ vành khuyên (Tỷ trọng)</option>
+                    <!-- UPDATED: UI for Level 3 -->
+                    <div id="chart-suggestion-container" class="advanced-analysis-container" style="display: none;">
+                        <select id="chart-suggestion-select">
+                            <option value="" disabled selected>Gợi ý phân tích bằng biểu đồ...</option>
                         </select>
                     </div>
                     <div class="chat-history" id="case-trainer-chat-history"></div>
