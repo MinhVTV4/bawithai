@@ -80,6 +80,8 @@
         .btn-danger { background-color: var(--danger-color); }
         .btn-danger:hover { background-color: var(--danger-hover); }
         .btn-icon { padding: 8px 12px; }
+        .btn-subtle { background: none; border: none; color: var(--text-dark); padding: 5px; }
+        .btn-subtle:hover { background-color: var(--main-bg); }
         
         .chat-input-form { display: flex; gap: 10px; margin-top: 20px; }
         .chat-input-form input { flex-grow: 1; padding: 12px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 16px; }
@@ -94,13 +96,28 @@
         .btn-group button { background-color: var(--btn-secondary-bg); color: var(--text-dark); }
         .btn-group button.selected { background-color: var(--accent-color); color: white; }
         
-        /* Notebook Styles */
-        #notebook-header { padding: 20px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
-        #notebook-header h3 { margin: 0; font-size: 1.25rem; color: var(--sidebar-bg); }
-        #notebook-status { font-size: 0.8rem; color: #94a3b8; font-style: italic; }
-        #notebook-content { padding: 20px; flex-grow: 1; overflow-y: auto; }
+        /* Right Panel Sections */
+        .right-panel-section { border-bottom: 1px solid #e2e8f0; }
+        .right-panel-header { padding: 20px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+        .right-panel-header h3 { margin: 0; font-size: 1.25rem; color: var(--sidebar-bg); }
+        .right-panel-header .toggle-icon { transition: transform 0.3s ease; }
+        .right-panel-section.collapsed .toggle-icon { transform: rotate(-90deg); }
+        .right-panel-content { padding: 0 20px 20px 20px; display: block; }
+        .right-panel-section.collapsed .right-panel-content { display: none; }
+
+        #notebook-content { flex-grow: 1; display: flex; flex-direction: column; }
         #scratchpad-textarea { width: 100%; height: 100%; border: none; resize: none; font-family: 'Inter', sans-serif; font-size: 0.95rem; color: var(--text-dark); line-height: 1.6; background-color: transparent; }
         #scratchpad-textarea:focus { outline: none; }
+        #notebook-footer { padding: 10px 20px; font-size: 0.8rem; color: #94a3b8; font-style: italic; align-self: flex-end; }
+
+        #session-history-list { max-height: 300px; overflow-y: auto; }
+        .history-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 8px; border-bottom: 1px solid #f1f5f9; }
+        .history-item:last-child { border-bottom: none; }
+        .history-item-info { display: flex; flex-direction: column; }
+        .history-item-title { font-weight: 500; color: var(--text-dark); margin-bottom: 4px; }
+        .history-item-date { font-size: 0.75rem; color: #64748b; }
+        .history-item-actions button { padding: 6px 10px; font-size: 0.8rem; }
+
 
         /* Chat Styles */
         .chat-history { height: 500px; overflow-y: auto; border: 1px solid #e2e8f0; padding: 10px; border-radius: 8px; margin-bottom: 15px; display: flex; flex-direction: column; }
@@ -180,12 +197,28 @@
         </div>
 
         <aside id="right-panel">
-            <div id="notebook-header">
-                <h3>Sổ Tay Phân Tích</h3>
-                <span id="notebook-status"></span>
+            <div id="session-history-container" class="right-panel-section collapsed">
+                <div class="right-panel-header" id="session-history-header">
+                    <h3>Lịch Sử Phiên</h3>
+                    <button class="btn-subtle toggle-icon"><i class="fa-solid fa-chevron-down"></i></button>
+                </div>
+                <div class="right-panel-content">
+                    <div id="session-history-list">
+                        <!-- History items will be injected here -->
+                    </div>
+                </div>
             </div>
-            <div id="notebook-content">
-                <textarea id="scratchpad-textarea" placeholder="Ghi chú nhanh những insight quan trọng, ý tưởng, hoặc dàn ý tại đây..."></textarea>
+            <div id="notebook-container" class="right-panel-section">
+                <div class="right-panel-header" id="notebook-header">
+                    <h3>Sổ Tay Phân Tích</h3>
+                     <button class="btn-subtle toggle-icon"><i class="fa-solid fa-chevron-down"></i></button>
+                </div>
+                <div class="right-panel-content" id="notebook-content">
+                    <textarea id="scratchpad-textarea" placeholder="Ghi chú nhanh những insight quan trọng, ý tưởng, hoặc dàn ý tại đây..."></textarea>
+                     <div id="notebook-footer">
+                        <span id="notebook-status"></span>
+                    </div>
+                </div>
             </div>
         </aside>
     </div>
@@ -193,7 +226,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.0/firebase-app.js";
         import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/11.9.0/firebase-auth.js";
-        import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.9.0/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, onSnapshot, collection, addDoc, serverTimestamp, query, getDocs, getDoc, deleteDoc, orderBy } from "https://www.gstatic.com/firebasejs/11.9.0/firebase-firestore.js";
         import { getAI, getGenerativeModel } from "https://www.gstatic.com/firebasejs/11.9.0/firebase-ai.js";
 
         const firebaseConfig = {
@@ -301,7 +334,7 @@
             setupLearningRoom();
             setupCaseTrainer();
             setupMockInterview();
-            setupScratchpad();
+            setupRightPanel();
             showModule(window.location.hash || '#learning-room');
         }
         
@@ -319,18 +352,7 @@
         
         function getValidHistoryForChat(history) {
             if (!history || history.length === 0) return [];
-            const validHistory = [];
-            let lastRole = null;
-            for (const currentMsg of history) {
-                if (!currentMsg.role || !currentMsg.parts || !currentMsg.parts[0] || !currentMsg.parts[0].text) continue;
-                if (currentMsg.role === lastRole) {
-                    validHistory.push(currentMsg);
-                } else {
-                    validHistory.push(currentMsg);
-                    lastRole = currentMsg.role;
-                }
-            }
-            return validHistory;
+            return history.filter(msg => msg.role && msg.parts && msg.parts[0] && msg.parts[0].text);
         }
 
         function setupNavigation() {
@@ -352,14 +374,10 @@
         
         function extractJson(text) {
             const match = text.match(/```json\n([\s\S]*?)\n```/);
-            if (match && match[1]) {
-                return match[1];
-            }
+            if (match && match[1]) return match[1];
             const startIndex = text.indexOf('{');
             const endIndex = text.lastIndexOf('}');
-            if (startIndex > -1 && endIndex > -1) {
-                return text.substring(startIndex, endIndex + 1);
-            }
+            if (startIndex > -1 && endIndex > -1) return text.substring(startIndex, endIndex + 1);
             return text; 
         }
 
@@ -369,6 +387,16 @@
                 clearTimeout(timeout);
                 timeout = setTimeout(() => func.apply(this, args), delay);
             };
+        }
+
+        function setupRightPanel() {
+            document.querySelectorAll('.right-panel-header').forEach(header => {
+                header.addEventListener('click', () => {
+                    header.parentElement.classList.toggle('collapsed');
+                });
+            });
+            setupScratchpad();
+            setupSessionHistory();
         }
 
         function setupScratchpad() {
@@ -405,6 +433,79 @@
                 statusEl.textContent = 'Đã lưu';
             });
             unsubscribeListeners.push(unsub);
+        }
+
+        function setupSessionHistory() {
+            const historyListEl = document.getElementById('session-history-list');
+            if (!historyListEl) return;
+            const archivesCollectionRef = collection(db, 'users', currentUser.uid, 'archives');
+
+            const unsub = onSnapshot(query(archivesCollectionRef, orderBy('timestamp', 'desc')), (snapshot) => {
+                historyListEl.innerHTML = '';
+                if (snapshot.empty) {
+                    historyListEl.innerHTML = '<p style="padding: 12px 8px; font-size: 0.85rem; color: #64748b;">Chưa có phiên nào được lưu trữ.</p>';
+                    return;
+                }
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    const itemEl = document.createElement('div');
+                    itemEl.className = 'history-item';
+                    const date = data.timestamp?.toDate().toLocaleString('vi-VN') || 'Không rõ ngày';
+                    itemEl.innerHTML = `
+                        <div class="history-item-info">
+                            <span class="history-item-title">${data.title || 'Phiên chưa đặt tên'}</span>
+                            <span class="history-item-date">${date}</span>
+                        </div>
+                        <div class="history-item-actions">
+                            <button class="btn-subtle load-history-btn" data-id="${doc.id}"><i class="fa-solid fa-upload"></i> Tải lại</button>
+                        </div>`;
+                    
+                    itemEl.querySelector('.load-history-btn').addEventListener('click', async (e) => {
+                        e.stopPropagation();
+                        if (confirm(`Bạn có muốn tải lại phiên "${data.title}" không? Phiên làm việc hiện tại sẽ được lưu trữ.`)) {
+                            const archiveId = e.currentTarget.dataset.id;
+                            const archiveDocRef = doc(db, 'users', currentUser.uid, 'archives', archiveId);
+                            const archiveDoc = await getDoc(archiveDocRef);
+                            if (archiveDoc.exists()) {
+                                const archivedData = archiveDoc.data();
+                                // Archive current session before loading another
+                                await archiveAndClearSession('case-trainer', true); // Pass true to avoid confirmation
+                                // Load the archived session
+                                await saveData('chats', 'case-trainer', { history: archivedData.history, fileName: archivedData.fileName || '' });
+                            }
+                        }
+                    });
+
+                    historyListEl.appendChild(itemEl);
+                });
+            });
+            unsubscribeListeners.push(unsub);
+        }
+
+        async function archiveAndClearSession(moduleId, skipConfirm = false) {
+            if (!currentUser) return;
+            const activeSessionRef = doc(db, 'users', currentUser.uid, 'chats', moduleId);
+            const activeSessionDoc = await getDoc(activeSessionRef);
+
+            if (activeSessionDoc.exists() && activeSessionDoc.data().history?.length > 1) {
+                if (!skipConfirm && !confirm("Bạn có chắc muốn lưu trữ phiên này và bắt đầu lại không?")) {
+                    return false; // User cancelled
+                }
+                
+                const dataToArchive = activeSessionDoc.data();
+                let title = dataToArchive.fileName ? `Phân tích file: ${dataToArchive.fileName}` : `Phiên lúc ${new Date().toLocaleString('vi-VN')}`;
+                
+                const archiveData = {
+                    ...dataToArchive,
+                    title: title,
+                    timestamp: serverTimestamp()
+                };
+                
+                await addDoc(collection(db, 'users', currentUser.uid, 'archives'), archiveData);
+            }
+
+            await saveData('chats', moduleId, { history: [], fileName: '' });
+            return true; // Operation completed
         }
         
         function setupLearningRoom() {
@@ -850,7 +951,6 @@
             });
             unsubscribeListeners.push(unsub);
             
-            document.querySelector('#case-trainer .file-upload-wrapper')?.addEventListener('click', () => fileInput.click());
             fileInput?.addEventListener('change', (event) => {
                 const file = event.target.files[0];
                 if (!file) return;
@@ -858,7 +958,10 @@
                 if(fileUploadText) fileUploadText.textContent = `Đã chọn file: ${file.name}.`;
             });
             
-            analyzeBtn?.addEventListener('click', () => {
+            analyzeBtn?.addEventListener('click', async () => {
+                const proceeded = await archiveAndClearSession(moduleId);
+                if (!proceeded) return;
+
                 const file = fileInput.files[0];
                 if (!file || !geminiModel) return;
                 
@@ -927,10 +1030,13 @@
                         const responseText = await result.response.text();
                         const cleanedJsonString = extractJson(responseText);
                         JSON.parse(cleanedJsonString);
-                        await saveData("chats", moduleId, { history: [
-                            { role: 'user', parts: [{ text: initialPrompt }] },
-                            { role: 'model', parts: [{ text: cleanedJsonString }] }
-                        ] });
+                        await saveData("chats", moduleId, { 
+                            history: [
+                                { role: 'user', parts: [{ text: initialPrompt }] },
+                                { role: 'model', parts: [{ text: cleanedJsonString }] }
+                            ],
+                            fileName: file.name 
+                        });
                     } catch (err) {
                         console.error("Error getting initial analysis from AI:", err);
                         showAnalysisError("AI đã trả về một phản hồi không hợp lệ. Vui lòng thử lại với một file khác hoặc một truy vấn khác.");
@@ -976,20 +1082,20 @@
                 } finally {
                     submitButton.disabled = false;
                     submitButton.innerHTML = originalSubmitHTML;
-                    if(sourceButton) {
+                    if(sourceButton && suggestionsGroup.contains(sourceButton)) {
                          sourceButton.innerHTML = originalSourceHTML;
                     }
                     suggestionsGroup.querySelectorAll('button').forEach(btn => btn.disabled = false);
                 }
             });
 
-             clearBtn.addEventListener('click', () => {
-                if (confirm("Bạn có chắc muốn xóa phiên phân tích này không?")) {
+             clearBtn.addEventListener('click', async () => {
+                 const cleared = await archiveAndClearSession(moduleId);
+                 if(cleared) {
                     fileInput.value = '';
                     if(fileUploadText) fileUploadText.textContent = 'Nhấp để chọn file CSV, Excel, PDF hoặc DOCX';
                     if(analyzeBtn) analyzeBtn.disabled = true;
-                    saveData("chats", moduleId, { history: [] });
-                }
+                 }
             });
         }
         
@@ -1006,7 +1112,7 @@
             <div id="case-trainer" class="module-content">
                  <div class="module-header-wrapper">
                     <h1 class="module-header">AI Case Trainer</h1>
-                    <button id="clear-case-trainer-history" class="btn-icon btn-danger" title="Bắt đầu lại"><i class="fa-solid fa-trash-can"></i></button>
+                    <button id="clear-case-trainer-history" class="btn-icon btn-danger" title="Lưu trữ và Bắt đầu lại"><i class="fa-solid fa-box-archive"></i></button>
                  </div>
                  <p class="module-subheader">Tải lên file dữ liệu và để AI trở thành trợ lý phân tích của bạn.</p>
                  
