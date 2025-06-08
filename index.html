@@ -116,6 +116,7 @@
         .history-item-info { display: flex; flex-direction: column; }
         .history-item-title { font-weight: 500; color: var(--text-dark); margin-bottom: 4px; }
         .history-item-date { font-size: 0.75rem; color: #64748b; }
+        .history-item-actions { display: flex; gap: 5px; }
         .history-item-actions button { padding: 6px 10px; font-size: 0.8rem; }
 
 
@@ -457,7 +458,8 @@
                             <span class="history-item-date">${date}</span>
                         </div>
                         <div class="history-item-actions">
-                            <button class="btn-subtle load-history-btn" data-id="${doc.id}"><i class="fa-solid fa-upload"></i> Tải lại</button>
+                            <button class="btn-subtle load-history-btn" data-id="${doc.id}" title="Tải lại phiên này"><i class="fa-solid fa-upload"></i></button>
+                            <button class="btn-subtle btn-danger delete-history-btn" data-id="${doc.id}" title="Xóa phiên này"><i class="fa-solid fa-trash-can"></i></button>
                         </div>`;
                     
                     itemEl.querySelector('.load-history-btn').addEventListener('click', async (e) => {
@@ -468,11 +470,18 @@
                             const archiveDoc = await getDoc(archiveDocRef);
                             if (archiveDoc.exists()) {
                                 const archivedData = archiveDoc.data();
-                                // Archive current session before loading another
-                                await archiveAndClearSession('case-trainer', true); // Pass true to avoid confirmation
-                                // Load the archived session
+                                await archiveCurrentSession('case-trainer');
                                 await saveData('chats', 'case-trainer', { history: archivedData.history, fileName: archivedData.fileName || '' });
                             }
+                        }
+                    });
+                    
+                    itemEl.querySelector('.delete-history-btn').addEventListener('click', async (e) => {
+                        e.stopPropagation();
+                        if (confirm(`Bạn có chắc muốn XÓA vĩnh viễn phiên "${data.title}" không? Hành động này không thể hoàn tác.`)) {
+                            const archiveId = e.currentTarget.dataset.id;
+                            const archiveDocRef = doc(db, 'users', currentUser.uid, 'archives', archiveId);
+                            await deleteDoc(archiveDocRef);
                         }
                     });
 
@@ -482,16 +491,12 @@
             unsubscribeListeners.push(unsub);
         }
 
-        async function archiveAndClearSession(moduleId, skipConfirm = false) {
+        async function archiveCurrentSession(moduleId) {
             if (!currentUser) return;
             const activeSessionRef = doc(db, 'users', currentUser.uid, 'chats', moduleId);
             const activeSessionDoc = await getDoc(activeSessionRef);
 
             if (activeSessionDoc.exists() && activeSessionDoc.data().history?.length > 1) {
-                if (!skipConfirm && !confirm("Bạn có chắc muốn lưu trữ phiên này và bắt đầu lại không?")) {
-                    return false; // User cancelled
-                }
-                
                 const dataToArchive = activeSessionDoc.data();
                 let title = dataToArchive.fileName ? `Phân tích file: ${dataToArchive.fileName}` : `Phiên lúc ${new Date().toLocaleString('vi-VN')}`;
                 
@@ -503,9 +508,6 @@
                 
                 await addDoc(collection(db, 'users', currentUser.uid, 'archives'), archiveData);
             }
-
-            await saveData('chats', moduleId, { history: [], fileName: '' });
-            return true; // Operation completed
         }
         
         function setupLearningRoom() {
@@ -959,8 +961,8 @@
             });
             
             analyzeBtn?.addEventListener('click', async () => {
-                const proceeded = await archiveAndClearSession(moduleId);
-                if (!proceeded) return;
+                await archiveCurrentSession(moduleId);
+                await saveData("chats", moduleId, { history: [], fileName: '' });
 
                 const file = fileInput.files[0];
                 if (!file || !geminiModel) return;
@@ -1090,12 +1092,11 @@
             });
 
              clearBtn.addEventListener('click', async () => {
-                 const cleared = await archiveAndClearSession(moduleId);
-                 if(cleared) {
-                    fileInput.value = '';
-                    if(fileUploadText) fileUploadText.textContent = 'Nhấp để chọn file CSV, Excel, PDF hoặc DOCX';
-                    if(analyzeBtn) analyzeBtn.disabled = true;
-                 }
+                await archiveCurrentSession(moduleId);
+                await saveData("chats", moduleId, { history: [], fileName: '' });
+                fileInput.value = '';
+                if(fileUploadText) fileUploadText.textContent = 'Nhấp để chọn file CSV, Excel, PDF hoặc DOCX';
+                if(analyzeBtn) analyzeBtn.disabled = true;
             });
         }
         
@@ -1171,3 +1172,4 @@
     </script>
 </body>
 </html>
+"
