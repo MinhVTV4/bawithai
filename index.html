@@ -311,6 +311,14 @@
         </aside>
     </div>
 
+    <template id="guided-analysis-template">
+        <div id="guided-step-2-goals">
+            <h3 id="guided-goals-header"></h3>
+            <div id="guided-goals-buttons" class="suggestion-button-group"></div>
+        </div>
+        <button id="guided-back-button" class="btn-subtle" style="margin-top: 20px;"><i class="fa-solid fa-arrow-left"></i> Quay lại</button>
+    </template>
+
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.0/firebase-app.js";
         import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/11.9.0/firebase-auth.js";
@@ -897,6 +905,7 @@
             const analysisModeChooser = document.getElementById('analysis-mode-chooser');
             const quickAnalysisSection = document.getElementById('quick-analysis-section');
             const analysisHub = document.getElementById('analysis-hub');
+            const guidedWizard = document.getElementById('guided-analysis-wizard');
             
             // Buttons
             const startGuidedBtn = document.getElementById('start-guided-analysis');
@@ -918,12 +927,18 @@
             let currentArchiveId = null; 
             let bookmarkedPrompts = new Set(); 
             let bookmarkedDocs = new Map();
+            let analysisMode = 'chooser'; // 'chooser', 'quick', 'guided'
+            let fileDataContext = null; // Store file content for the wizard
+            let currentFile = null;
             
             startGuidedBtn.addEventListener('click', () => {
-                alert("Tính năng 'Phân tích có Hướng dẫn' đang được phát triển!");
+                analysisMode = 'guided';
+                fileInput.value = null; // Reset file input
+                fileInput.click();
             });
 
             startQuickBtn.addEventListener('click', () => {
+                analysisMode = 'quick';
                 analysisModeChooser.style.display = 'none';
                 quickAnalysisSection.style.display = 'block';
             });
@@ -931,6 +946,7 @@
             document.getElementById('back-to-mode-chooser').addEventListener('click', () => {
                 quickAnalysisSection.style.display = 'none';
                 analysisModeChooser.style.display = 'block';
+                analysisMode = 'chooser';
             });
 
             const bookmarksCollectionRef = collection(db, 'users', currentUser.uid, 'bookmarked_prompts');
@@ -1106,7 +1122,7 @@
                             const button = document.createElement('button');
                             let icon = '❓';
                             if (sugg.type === 'chart') icon = '📈';
-                            else if (sugg.type === 'deep-dive') icon = '�';
+                            else if (sugg.type === 'deep-dive') icon = '🔬';
                             button.innerHTML = `<span>${icon}</span> ${sugg.text}`;
                             button.onclick = (e) => { if (isThinking) return; form.dispatchEvent(new CustomEvent('submit', { detail: { query: sugg.text, sourceButton: e.currentTarget } })); };
                             wrapper.appendChild(button);
@@ -1171,38 +1187,133 @@
                     }
                     analysisModeChooser.style.display = 'none';
                     quickAnalysisSection.style.display = 'none';
+                    guidedWizard.style.display = 'none';
                     analysisHub.style.display = 'block';
                 } else {
                     analysisHub.style.display = 'none';
                     quickAnalysisSection.style.display = 'none';
+                    guidedWizard.style.display = 'none';
                     analysisModeChooser.style.display = 'block';
                 }
             });
             unsubscribeListeners.push(unsub);
             
-            fileInput?.addEventListener('change', (event) => {
+            fileInput?.addEventListener('change', async (event) => {
                 const file = event.target.files[0];
                 if (!file) return;
-                if(analyzeBtn) analyzeBtn.disabled = false;
-                if(fileUploadText) fileUploadText.textContent = `Đã chọn file: ${file.name}.`;
+                currentFile = file;
+
+                if (analysisMode === 'quick') {
+                    if(analyzeBtn) analyzeBtn.disabled = false;
+                    if(fileUploadText) fileUploadText.textContent = `Đã chọn file: ${file.name}.`;
+                } else if (analysisMode === 'guided') {
+                    analysisModeChooser.style.display = 'none';
+                    guidedWizard.style.display = 'block';
+                    guidedWizard.querySelector('#guided-wizard-content').innerHTML = `<div class="large-spinner"></div><p>AI đang quét dữ liệu của bạn...</p>`;
+                    await startGuidedAnalysisFlow(file);
+                }
             });
             
-            analyzeBtn?.addEventListener('click', async () => {
-                const originalBtnHTML = analyzeBtn.innerHTML;
-                analyzeBtn.disabled = true;
-                analyzeBtn.innerHTML = `<span><div class="small-spinner"></div> Đang xử lý...</span>`;
-                try {
-                    await archiveCurrentSession(moduleId);
-                    const file = fileInput.files[0];
-                    if (!file) throw new Error("Không có file được chọn");
-
-                    await saveData("chats", moduleId, { history: [], fileName: file.name, activeArchiveId: null });
+            async function startGuidedAnalysisFlow(file) {
+                 try {
                     const reader = new FileReader();
                     reader.onload = async (e) => {
                         let dataContext = '';
                         try {
                             const fileContent = e.target.result;
                             const fileExtension = file.name.split('.').pop().toLowerCase();
+                             if (['csv', 'txt'].includes(fileExtension)) { dataContext = fileContent; }
+                             else if (['xlsx', 'xls'].includes(fileExtension)) { const wb = XLSX.read(fileContent, {type:'array'}); wb.SheetNames.forEach(sn => { dataContext += `--- SHEET: ${sn} ---\n${XLSX.utils.sheet_to_csv(wb.Sheets[sn])}\n`; }); }
+                             else if (fileExtension === 'pdf') { const pdf = await pdfjsLib.getDocument(new Uint8Array(fileContent)).promise; for (let i = 1; i <= pdf.numPages; i++) { const page = await pdf.getPage(i); const tc = await page.getTextContent(); dataContext += tc.items.map(item => item.str).join(' ') + '\n'; } }
+                             else if (fileExtension === 'docx') { const res = await mammoth.extractRawText({arrayBuffer: fileContent}); dataContext = res.value; }
+
+                            fileDataContext = dataContext;
+
+                            const structurePrompt = `Analyze the structure of the following data excerpt. Return a JSON object with a key "columns" which is an array of strings representing the column names. Data: \n${dataContext.substring(0, 2000)}`;
+                            let result = await geminiModel.startChat().sendMessage(structurePrompt);
+                            let responseText = await result.response.text();
+                            let structureObj = JSON.parse(extractJson(responseText));
+
+                            const goalsPrompt = `Based on these data columns [${structureObj.columns.join(', ')}], suggest 3 main analysis goals for a business analyst. Return a JSON object with a key "goals" which is an array of short, actionable strings. The goals must be in Vietnamese.`;
+                            result = await geminiModel.startChat().sendMessage(goalsPrompt);
+                            responseText = await result.response.text();
+                            let goalsObj = JSON.parse(extractJson(responseText));
+
+                            const wizardContent = guidedWizard.querySelector('#guided-wizard-content');
+                            wizardContent.innerHTML = '';
+                            
+                            const template = document.getElementById('guided-analysis-template');
+                            const wizardClone = template.content.cloneNode(true);
+                            wizardContent.appendChild(wizardClone);
+                            
+                            const guidedGoalsHeader = wizardContent.querySelector('#guided-goals-header');
+                            const guidedGoalsButtons = wizardContent.querySelector('#guided-goals-buttons');
+                            const backButton = wizardContent.querySelector('#guided-back-button');
+                            
+                            guidedGoalsHeader.textContent = `Tuyệt vời! AI đã quét xong dữ liệu. Dưới đây là một vài hướng phân tích được gợi ý cho file ${file.name}. Bạn muốn bắt đầu từ đâu?`;
+                            guidedGoalsButtons.innerHTML = '';
+                            goalsObj.goals.forEach(goal => {
+                                const button = document.createElement('button');
+                                button.className = 'btn-primary-large';
+                                button.innerHTML = `<span>${goal}</span>`;
+                                button.onclick = () => initiateAnalysisFromGoal(goal);
+                                guidedGoalsButtons.appendChild(button);
+                            });
+                            
+                            backButton.onclick = () => {
+                                guidedWizard.style.display = 'none';
+                                analysisModeChooser.style.display = 'block';
+                                analysisMode = 'chooser';
+                            };
+
+                        } catch (err) {
+                             console.error("Error in guided flow:", err);
+                             guidedWizard.querySelector('#guided-wizard-content').innerHTML = `<div class="error-card"><p>Có lỗi xảy ra trong quá trình phân tích có hướng dẫn. Vui lòng thử lại.</p></div>`;
+                        }
+                    };
+                    if (['csv', 'txt'].includes(file.name.split('.').pop().toLowerCase())) reader.readAsText(file); else reader.readAsArrayBuffer(file);
+                } catch(err) {
+                    console.error("File read error:", err);
+                    guidedWizard.querySelector('#guided-wizard-content').innerHTML = `<div class="error-card"><p>Không thể đọc file. Vui lòng kiểm tra lại file của bạn.</p></div>`;
+                }
+            }
+            
+            async function initiateAnalysisFromGoal(goal) {
+                await archiveCurrentSession(moduleId);
+                await saveData("chats", moduleId, { history: [], fileName: currentFile.name, activeArchiveId: null });
+
+                const initialPrompt = `You are an expert Business Analyst assistant. Your response language MUST be ${selectedLanguage}. The user has uploaded data and has chosen the following analysis goal: "${goal}". Now, perform the first analysis based on this goal. Use the context data below.\n---DATA---\n${fileDataContext}\n---END DATA---\nYour entire response MUST be a single, strictly valid, data-only JSON object, with no surrounding text, markdown, or explanations. CRITICALLY, this JSON must be 100% serializable and MUST NOT contain any JavaScript functions, comments, or any other non-standard JSON syntax. The JSON object must have the following keys: "mainInsight" (String), "keyMetrics" (Array of {label: String, value: String}), "curatedSuggestions" (Array of {type: String, text: String}). **Follow-up Response Rules (Very Important):** If a follow-up asks for a chart, respond ONLY with a strictly valid, 100% serializable Chart.js (v3+) JSON object inside <chart> tags. DO NOT include functions, comments, or any non-standard syntax. Example: <chart>{ "type": "bar", ... }</chart>. If a follow-up asks for a deep-dive, respond ONLY with a strictly valid JSON object: { "title": "...", "sections": [ { "heading": "...", "content": "..." } ] }. Otherwise, provide a concise answer in Markdown. Now, generate the initial analysis hub JSON response in ${selectedLanguage}.`;
+                
+                chatSession = geminiModel.startChat();
+                try {
+                    const result = await chatSession.sendMessage(initialPrompt);
+                    const responseText = await result.response.text();
+                    const cleanedJsonString = extractJson(responseText);
+                    JSON.parse(cleanedJsonString);
+                    await saveData("chats", moduleId, { history: [{ role: 'user', parts: [{ text: initialPrompt }] }, { role: 'model', parts: [{ text: cleanedJsonString }] }], fileName: currentFile.name });
+                } catch (err) { 
+                    console.error("Error initial analysis from goal:", err);
+                    showAnalysisError("AI trả về phản hồi không hợp lệ. Vui lòng thử lại."); 
+                    await saveData("chats", moduleId, { history:[], fileName:'', activeArchiveId: null }); 
+                }
+            }
+
+
+            analyzeBtn?.addEventListener('click', async () => {
+                const originalBtnHTML = analyzeBtn.innerHTML;
+                analyzeBtn.disabled = true;
+                analyzeBtn.innerHTML = `<span><div class="small-spinner"></div> Đang xử lý...</span>`;
+                try {
+                    await archiveCurrentSession(moduleId);
+                    if (!currentFile) throw new Error("Không có file được chọn");
+
+                    await saveData("chats", moduleId, { history: [], fileName: currentFile.name, activeArchiveId: null });
+                    const reader = new FileReader();
+                    reader.onload = async (e) => {
+                        let dataContext = '';
+                        try {
+                            const fileContent = e.target.result;
+                            const fileExtension = currentFile.name.split('.').pop().toLowerCase();
                             if (['csv', 'txt'].includes(fileExtension)) { dataContext = fileContent; }
                             else if (['xlsx', 'xls'].includes(fileExtension)) { const wb = XLSX.read(fileContent, {type:'array'}); wb.SheetNames.forEach(sn => { dataContext += `--- SHEET: ${sn} ---\n${XLSX.utils.sheet_to_csv(wb.Sheets[sn])}\n`; }); }
                             else if (fileExtension === 'pdf') { const pdf = await pdfjsLib.getDocument(new Uint8Array(fileContent)).promise; for (let i = 1; i <= pdf.numPages; i++) { const page = await pdf.getPage(i); const tc = await page.getTextContent(); dataContext += tc.items.map(item => item.str).join(' ') + '\n'; } }
@@ -1224,14 +1335,14 @@
                             const responseText = await result.response.text();
                             const cleanedJsonString = extractJson(responseText);
                             JSON.parse(cleanedJsonString);
-                            await saveData("chats", moduleId, { history: [{ role: 'user', parts: [{ text: initialPrompt }] }, { role: 'model', parts: [{ text: cleanedJsonString }] }], fileName: file.name });
+                            await saveData("chats", moduleId, { history: [{ role: 'user', parts: [{ text: initialPrompt }] }, { role: 'model', parts: [{ text: cleanedJsonString }] }], fileName: currentFile.name });
                         } catch (err) { 
                             console.error("Error initial analysis:", err);
                             showAnalysisError("AI trả về phản hồi không hợp lệ. Vui lòng thử lại."); 
                             await saveData("chats", moduleId, { history:[], fileName:'', activeArchiveId: null }); 
                         }
                     };
-                    if (['csv', 'txt'].includes(file.name.split('.').pop().toLowerCase())) reader.readAsText(file); else reader.readAsArrayBuffer(file);
+                    if (['csv', 'txt'].includes(currentFile.name.split('.').pop().toLowerCase())) reader.readAsText(file); else reader.readAsArrayBuffer(file);
                 } catch (err) {
                     console.error("Analysis failed:", err);
                     showAnalysisError("Không thể bắt đầu phân tích. Vui lòng thử lại.");
@@ -1330,27 +1441,35 @@
                  </div>
                  <p class="module-subheader">Tải lên file dữ liệu và để AI trở thành trợ lý phân tích của bạn.</p>
                  
-                <div id="analysis-mode-chooser" class="controls-box">
-                    <button id="start-guided-analysis" class="btn-primary-large">
-                        <i class="fa-solid fa-wand-magic-sparkles fa-2x"></i>
-                        Phân tích có Hướng dẫn
-                        <span>Để AI gợi ý các bước phân tích cho bạn.</span>
-                    </button>
-                    <button id="start-quick-analysis" class="btn-secondary-link">Hoặc, bắt đầu chế độ Phân tích Nhanh</button>
-                </div>
+                <div id="case-trainer-content">
+                    <div id="analysis-mode-chooser" class="controls-box">
+                        <button id="start-guided-analysis" class="btn-primary-large">
+                            <i class="fa-solid fa-wand-magic-sparkles fa-2x"></i>
+                            Phân tích có Hướng dẫn
+                            <span>Để AI gợi ý các bước phân tích cho bạn.</span>
+                        </button>
+                        <button id="start-quick-analysis" class="btn-secondary-link">Hoặc, bắt đầu chế độ Phân tích Nhanh</button>
+                    </div>
 
-                <div id="quick-analysis-section" class="controls-box" style="display: none;">
-                    <button id="back-to-mode-chooser" class="btn-subtle" style="margin-bottom: 15px;"><i class="fa-solid fa-arrow-left"></i> Quay lại</button>
-                    <div class="setup-group">
-                        <span class="setup-label">Chọn ngôn ngữ phân tích:</span>
-                        <div id="case-trainer-language-btn-group" class="btn-group">
-                            <button class="language-btn selected" data-lang="vietnamese">Tiếng Việt</button>
-                            <button class="language-btn" data-lang="english">English</button>
+                    <div id="quick-analysis-section" class="controls-box" style="display: none;">
+                        <button id="back-to-mode-chooser" class="btn-subtle" style="margin-bottom: 15px;"><i class="fa-solid fa-arrow-left"></i> Quay lại</button>
+                        <div class="setup-group">
+                            <span class="setup-label">Chọn ngôn ngữ phân tích:</span>
+                            <div id="case-trainer-language-btn-group" class="btn-group">
+                                <button class="language-btn selected" data-lang="vietnamese">Tiếng Việt</button>
+                                <button class="language-btn" data-lang="english">English</button>
+                            </div>
+                        </div>
+                        <label for="fileInput" class="file-upload-wrapper"><i class="fa-solid fa-cloud-arrow-up fa-2x"></i> <br><span id="file-upload-text">Nhấp để chọn file CSV, Excel, PDF hoặc DOCX</span></label>
+                        <input type="file" id="fileInput" accept=".csv, .xlsx, .xls, .pdf, .docx, .txt" style="display: none;">
+                        <button id="analyzeFileButton" disabled style="margin-top: 20px; width: 100%;"><span>Bắt đầu Phân tích</span></button>
+                    </div>
+                    
+                    <div id="guided-analysis-wizard" class="controls-box" style="display: none;">
+                        <div id="guided-wizard-content">
+                            <!-- Dynamic content for the wizard will be injected here -->
                         </div>
                     </div>
-                    <label for="fileInput" class="file-upload-wrapper"><i class="fa-solid fa-cloud-arrow-up fa-2x"></i> <br><span id="file-upload-text">Nhấp để chọn file CSV, Excel, PDF hoặc DOCX</span></label>
-                    <input type="file" id="fileInput" accept=".csv, .xlsx, .xls, .pdf, .docx, .txt" style="display: none;">
-                    <button id="analyzeFileButton" disabled style="margin-top: 20px; width: 100%;"><span>Bắt đầu Phân tích</span></button>
                  </div>
 
                  <div id="analysis-hub" style="display: none;">
@@ -1395,4 +1514,3 @@
     </script>
 </body>
 </html>
-�
