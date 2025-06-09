@@ -643,17 +643,6 @@
                 const submitButton = form.querySelector('button');
                 const originalButtonHTML = submitButton.innerHTML;
                 
-                const tempUserMsg = document.createElement('div');
-                tempUserMsg.className = 'chat-message user-message';
-                tempUserMsg.innerHTML = window.marked.parse(userQuery);
-                historyEl.appendChild(tempUserMsg);
-                
-                const tempAiThinking = document.createElement('div');
-                tempAiThinking.className = 'chat-message ai-message';
-                tempAiThinking.innerHTML = `<div class="small-spinner"></div>`;
-                historyEl.appendChild(tempAiThinking);
-                historyEl.scrollTop = historyEl.scrollHeight;
-                
                 input.value = '';
                 submitButton.disabled = true;
                 submitButton.innerHTML = `<div class="small-spinner"></div>`;
@@ -661,6 +650,7 @@
                 const historyWithUserMsg = [...history, { role: 'user', parts: [{ text: userQuery }] }];
 
                 try {
+                    await saveData("chats", moduleId, { history: historyWithUserMsg });
                     const result = await chatSession.sendMessage(userQuery);
                     const fullResponse = await result.response.text();
                     
@@ -685,7 +675,184 @@
         }
         
         function setupMockInterview() {
-            // This logic can be filled in similarly to the other modules
+            const moduleId = 'mock-interview';
+            const setupSection = document.getElementById('interview-setup-section');
+            const chatSection = document.getElementById('interview-chat-section');
+            const historyEl = document.getElementById(`${moduleId}-chat-history`);
+            const form = document.getElementById('interview-chat-input-form');
+            const inputEl = document.getElementById('interview-chat-input');
+            const clearBtn = document.getElementById(`clear-${moduleId}-history`);
+            const startBtn = document.getElementById('startInterviewButton');
+            const langGroup = document.getElementById('language-btn-group');
+            const topicGroup = document.getElementById('topic-btn-group');
+
+            if (!setupSection || !chatSection || !historyEl || !form || !inputEl || !clearBtn || !startBtn || !langGroup || !topicGroup) return;
+
+            let sessionState = { history: [], language: 'vietnamese', topic: null, inProgress: false };
+            let chatSession = null;
+            let isThinking = false;
+
+            const speech = window.speechSynthesis;
+            let voices = [];
+            function populateVoiceList() {
+                if (typeof speechSynthesis === 'undefined') return;
+                voices = speechSynthesis.getVoices();
+            }
+            populateVoiceList();
+            if (typeof speechSynthesis !== 'undefined' && speechSynthesis.onvoiceschanged !== undefined) {
+                speechSynthesis.onvoiceschanged = populateVoiceList;
+            }
+
+            function addSpeakButton(messageDiv, lang) {
+                if (!messageDiv || messageDiv.querySelector('.speak-btn')) return;
+                const speakBtn = document.createElement('button');
+                speakBtn.className = 'speak-btn';
+                speakBtn.innerHTML = '<i class="fa-solid fa-volume-high"></i>';
+                speakBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    speakText(messageDiv.innerText, lang);
+                }
+                messageDiv.appendChild(speakBtn);
+            }
+            
+            function speakText(text, lang) {
+                if (!speech || !text) return;
+                const utterance = new SpeechSynthesisUtterance(text);
+                const targetLang = lang === 'vietnamese' ? 'vi-VN' : 'en-US';
+                utterance.lang = targetLang;
+                let voice = voices.find(v => v.lang === targetLang && v.name.includes('Google')) || voices.find(v => v.lang === targetLang);
+                if (voice) utterance.voice = voice;
+                speech.cancel();
+                speech.speak(utterance);
+            }
+
+            const unsub = onSnapshot(doc(db, "users", currentUser.uid, "chats", moduleId), (docSnapshot) => {
+                historyEl.innerHTML = '';
+                isThinking = false;
+                const data = docSnapshot.data();
+                sessionState = data ? { ...{history:[], inProgress: false, language: 'vietnamese', topic: null}, ...data } : sessionState;
+                sessionState.history = getValidHistoryForChat(sessionState.history);
+
+                const systemInstruction = {
+                    role: "system",
+                    parts: [{ text: `You are an experienced hiring manager conducting an interview. You must use the ${sessionState.language} language for the entire conversation. Ask one question at a time.` }]
+                };
+                chatSession = geminiModel.startChat({ history: sessionState.history, systemInstruction });
+
+                if (sessionState.inProgress) {
+                    sessionState.history.forEach(msg => {
+                        if (msg.role === 'user' && msg.parts[0].text.startsWith('Start by introducing yourself')) return;
+
+                        const senderClass = msg.role === 'user' ? 'user-message' : 'ai-message';
+                        const messageDiv = document.createElement('div');
+                        messageDiv.className = `chat-message ${senderClass}`;
+                        messageDiv.innerHTML = window.marked.parse(msg.parts[0].text);
+                        historyEl.appendChild(messageDiv);
+                        
+                        if (msg.role === 'model') {
+                           addSpeakButton(messageDiv, sessionState.language);
+                        }
+                    });
+                     historyEl.scrollTop = historyEl.scrollHeight;
+                    setupSection.style.display = 'none';
+                    chatSection.style.display = 'block';
+                } else {
+                    setupSection.style.display = 'block';
+                    chatSection.style.display = 'none';
+                }
+            });
+            unsubscribeListeners.push(unsub);
+            
+            const checkSelections = () => { startBtn.disabled = !sessionState.topic; };
+            langGroup.addEventListener('click', (e) => { 
+                if (e.target.classList.contains('language-btn')) { 
+                    langGroup.querySelector('.selected')?.classList.remove('selected'); 
+                    e.target.classList.add('selected'); 
+                    sessionState.language = e.target.dataset.lang; 
+                } 
+            });
+            topicGroup.addEventListener('click', (e) => { 
+                if (e.target.classList.contains('topic-btn')) { 
+                    topicGroup.querySelector('.selected')?.classList.remove('selected'); 
+                    e.target.classList.add('selected'); 
+                    sessionState.topic = e.target.dataset.topic; 
+                    checkSelections();
+                } 
+            });
+
+            startBtn.addEventListener('click', async () => {
+                if (startBtn.disabled) return;
+                
+                const submitButton = startBtn;
+                const originalButtonHTML = submitButton.innerHTML;
+                submitButton.disabled = true;
+                submitButton.innerHTML = `<div class="small-spinner"></div>`;
+
+                try {
+                    const systemInstruction = { role: "system", parts: [{ text: `You are an experienced hiring manager...` }] };
+                    sessionState.history = []; // Clear history before starting
+                    chatSession = geminiModel.startChat({ history: [], systemInstruction });
+                    
+                    const initialPrompt = `Start by introducing yourself in ${sessionState.language}. Then, ask the first question related to the topic: "${sessionState.topic}".`;
+                    
+                    const initialHistory = [ { role: 'user', parts: [{ text: initialPrompt }] } ];
+                    await saveData("chats", moduleId, { ...sessionState, history: initialHistory, inProgress: true });
+                    
+                    const result = await chatSession.sendMessage(initialPrompt);
+                    const fullResponseText = await result.response.text();
+                    
+                    const finalHistory = [...initialHistory, { role: 'model', parts: [{ text: fullResponseText }] } ];
+                    await saveData("chats", moduleId, { history: finalHistory });
+                    speakText(fullResponseText, sessionState.language);
+                } catch (error) {
+                    console.error("Error starting interview:", error);
+                    await saveData("chats", moduleId, { history: [], inProgress: false, topic: null });
+                } finally {
+                    submitButton.disabled = false;
+                    submitButton.innerHTML = originalButtonHTML;
+                }
+            });
+
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const userResponse = inputEl.value.trim();
+                if (!userResponse || !chatSession || isThinking) return;
+                
+                isThinking = true;
+                const submitButton = form.querySelector('button');
+                const originalButtonHTML = submitButton.innerHTML;
+                inputEl.value = '';
+                submitButton.disabled = true;
+                submitButton.innerHTML = `<div class="small-spinner"></div>`;
+
+                const historyWithUserMsg = [...sessionState.history, { role: 'user', parts: [{ text: userResponse }] }];
+                await saveData("chats", moduleId, { history: historyWithUserMsg });
+
+                try {
+                    const result = await chatSession.sendMessage(userResponse);
+                    const fullResponseText = await result.response.text();
+                    const finalHistory = [...historyWithUserMsg, { role: 'model', parts: [{ text: fullResponseText }] }];
+                    await saveData("chats", moduleId, { history: finalHistory });
+                    speakText(fullResponseText, sessionState.language);
+                } catch (error) {
+                    console.error("Error in mock interview chat:", error);
+                    const errorHistory = [...historyWithUserMsg, { role: 'model', parts: [{ text: "Lỗi: Không thể nhận phản hồi." }] }];
+                    await saveData("chats", moduleId, { history: errorHistory });
+                } finally {
+                    isThinking = false;
+                    submitButton.disabled = false;
+                    submitButton.innerHTML = originalButtonHTML;
+                }
+            });
+
+            clearBtn.addEventListener('click', () => {
+                if (confirm("Bạn có chắc muốn kết thúc buổi phỏng vấn này không?")) {
+                    speech.cancel();
+                    topicGroup.querySelector('.selected')?.classList.remove('selected');
+                    startBtn.disabled = true;
+                    saveData("chats", moduleId, { history: [], inProgress: false, topic: null });
+                }
+            });
         }
         
         // =====================================================================
@@ -798,8 +965,6 @@
 
             function renderChart(canvasElement, chartData) {
                 if (!canvasElement) return;
-
-                // Defensive copy to avoid modifying the original object
                 const chartConfig = JSON.parse(JSON.stringify(chartData));
 
                 if (chartConfig.type === 'horizontalBar') {
@@ -808,7 +973,6 @@
                     chartConfig.options.indexAxis = 'y';
                 }
 
-                // Safely add formatter function if y-axis exists
                 if (chartConfig.options?.scales?.y) {
                     chartConfig.options.scales.y.ticks = {
                         ...chartConfig.options.scales.y.ticks,
@@ -825,7 +989,7 @@
             }
 
             function processFollowUpResponse(container, responseText) {
-                container.innerHTML = '';
+                 container.innerHTML = '';
                 const chartRegex = /<chart>([\s\S]*?)<\/chart>/;
                 const chartMatch = responseText.match(chartRegex);
                 if (chartMatch && chartMatch[1]) {
@@ -970,67 +1134,75 @@
             });
             
             analyzeBtn?.addEventListener('click', async () => {
-                await archiveCurrentSession(moduleId);
-                const file = fileInput.files[0];
-                if (!file) return;
-                await saveData("chats", moduleId, { history: [], fileName: file.name, activeArchiveId: null });
-                uploadSection.style.display = 'none';
-                analysisHub.style.display = 'block';
-                const mainInsightContainer = document.querySelector('#analysis-hub .main-insight-card-container');
-                if(mainInsightContainer) {
-                    mainInsightContainer.innerHTML = `<div class="main-insight-card"><div class="large-spinner"></div> <p>Đang phân tích tệp...</p></div>`;
-                    document.getElementById('analysis-hub-key-metrics-grid').innerHTML = '';
-                    document.getElementById('hub-suggestions-group').innerHTML = '';
-                    if(contentArea) contentArea.innerHTML = '';
+                const originalBtnHTML = analyzeBtn.innerHTML;
+                analyzeBtn.disabled = true;
+                analyzeBtn.innerHTML = `<span><div class="small-spinner"></div> Đang xử lý...</span>`;
+                try {
+                    await archiveCurrentSession(moduleId);
+                    const file = fileInput.files[0];
+                    if (!file) throw new Error("Không có file được chọn");
+
+                    await saveData("chats", moduleId, { history: [], fileName: file.name, activeArchiveId: null });
+                    const reader = new FileReader();
+                    reader.onload = async (e) => {
+                        let dataContext = '';
+                        try {
+                            const fileContent = e.target.result;
+                            const fileExtension = file.name.split('.').pop().toLowerCase();
+                            if (['csv', 'txt'].includes(fileExtension)) { dataContext = fileContent; }
+                            else if (['xlsx', 'xls'].includes(fileExtension)) { const wb = XLSX.read(fileContent, {type:'array'}); wb.SheetNames.forEach(sn => { dataContext += `--- SHEET: ${sn} ---\n${XLSX.utils.sheet_to_csv(wb.Sheets[sn])}\n`; }); }
+                            else if (fileExtension === 'pdf') { const pdf = await pdfjsLib.getDocument(new Uint8Array(fileContent)).promise; for (let i = 1; i <= pdf.numPages; i++) { const page = await pdf.getPage(i); const tc = await page.getTextContent(); dataContext += tc.items.map(item => item.str).join(' ') + '\n'; } }
+                            else if (fileExtension === 'docx') { const res = await mammoth.extractRawText({arrayBuffer: fileContent}); dataContext = res.value; }
+                        } catch (err) { 
+                            showAnalysisError(`Lỗi khi đọc file: ${err.message}`); 
+                            await saveData("chats", moduleId, { history:[], fileName:'', activeArchiveId: null }); 
+                            return; 
+                        }
+                        if (!dataContext) { 
+                            showAnalysisError("Không thể đọc file hoặc định dạng không được hỗ trợ."); 
+                            await saveData("chats", moduleId, { history:[], fileName:'', activeArchiveId: null }); 
+                            return; 
+                        }
+                        const initialPrompt = `You are an expert Business Analyst assistant. Your response language MUST be ${selectedLanguage}. The user has uploaded the following data:\n---DATA---\n${dataContext.substring(0, 100000)}\n---END DATA---\nYour entire response MUST be a single, strictly valid, data-only JSON object, with no surrounding text, markdown, or explanations. CRITICALLY, this JSON must be 100% serializable and MUST NOT contain any JavaScript functions, comments, or any other non-standard JSON syntax. The JSON object must have the following keys: "mainInsight" (String), "keyMetrics" (Array of {label: String, value: String}), "curatedSuggestions" (Array of {type: String, text: String}). **Follow-up Response Rules (Very Important):** If a follow-up asks for a chart, respond ONLY with a strictly valid, 100% serializable Chart.js (v3+) JSON object inside <chart> tags. DO NOT include functions, comments, or any non-standard syntax. Example: <chart>{ "type": "bar", ... }</chart>. If a follow-up asks for a deep-dive, respond ONLY with a strictly valid JSON object: { "title": "...", "sections": [ { "heading": "...", "content": "..." } ] }. Otherwise, provide a concise answer in Markdown. Now, generate the initial analysis hub JSON response in ${selectedLanguage}.`;
+                        chatSession = geminiModel.startChat();
+                        try {
+                            const result = await chatSession.sendMessage(initialPrompt);
+                            const responseText = await result.response.text();
+                            const cleanedJsonString = extractJson(responseText);
+                            JSON.parse(cleanedJsonString);
+                            await saveData("chats", moduleId, { history: [{ role: 'user', parts: [{ text: initialPrompt }] }, { role: 'model', parts: [{ text: cleanedJsonString }] }], fileName: file.name });
+                        } catch (err) { 
+                            console.error("Error initial analysis:", err);
+                            showAnalysisError("AI trả về phản hồi không hợp lệ. Vui lòng thử lại."); 
+                            await saveData("chats", moduleId, { history:[], fileName:'', activeArchiveId: null }); 
+                        }
+                    };
+                    if (['csv', 'txt'].includes(file.name.split('.').pop().toLowerCase())) reader.readAsText(file); else reader.readAsArrayBuffer(file);
+                } catch (err) {
+                    console.error("Analysis failed:", err);
+                    showAnalysisError("Không thể bắt đầu phân tích. Vui lòng thử lại.");
+                } finally {
+                    analyzeBtn.disabled = false;
+                    analyzeBtn.innerHTML = originalBtnHTML;
                 }
-                const reader = new FileReader();
-                reader.onload = async (e) => {
-                    let dataContext = '';
-                    try {
-                        const fileContent = e.target.result;
-                        const fileExtension = file.name.split('.').pop().toLowerCase();
-                        if (['csv', 'txt'].includes(fileExtension)) { dataContext = fileContent; }
-                        else if (['xlsx', 'xls'].includes(fileExtension)) { const wb = XLSX.read(fileContent, {type:'array'}); wb.SheetNames.forEach(sn => { dataContext += `--- SHEET: ${sn} ---\n${XLSX.utils.sheet_to_csv(wb.Sheets[sn])}\n`; }); }
-                        else if (fileExtension === 'pdf') { const pdf = await pdfjsLib.getDocument(new Uint8Array(fileContent)).promise; for (let i = 1; i <= pdf.numPages; i++) { const page = await pdf.getPage(i); const tc = await page.getTextContent(); dataContext += tc.items.map(item => item.str).join(' ') + '\n'; } }
-                        else if (fileExtension === 'docx') { const res = await mammoth.extractRawText({arrayBuffer: fileContent}); dataContext = res.value; }
-                    } catch (err) { 
-                        showAnalysisError(`Lỗi khi đọc file: ${err.message}`); 
-                        await saveData("chats", moduleId, { history:[], fileName:'', activeArchiveId: null }); 
-                        return; 
-                    }
-                    if (!dataContext) { 
-                        showAnalysisError("Không thể đọc file hoặc định dạng không được hỗ trợ."); 
-                        await saveData("chats", moduleId, { history:[], fileName:'', activeArchiveId: null }); 
-                        return; 
-                    }
-                    const initialPrompt = `You are an expert Business Analyst assistant. Your response language MUST be ${selectedLanguage}. The user has uploaded the following data:\n---DATA---\n${dataContext.substring(0, 100000)}\n---END DATA---\nYour entire response MUST be a single, strictly valid, data-only JSON object, with no surrounding text, markdown, or explanations. CRITICALLY, this JSON must be 100% serializable and MUST NOT contain any JavaScript functions, comments, or any other non-standard JSON syntax. The JSON object must have the following keys: "mainInsight" (String), "keyMetrics" (Array of {label: String, value: String}), "curatedSuggestions" (Array of {type: String, text: String}). **Follow-up Response Rules (Very Important):** If a follow-up asks for a chart, respond ONLY with a strictly valid, 100% serializable Chart.js (v3+) JSON object inside <chart> tags. DO NOT include functions, comments, or any non-standard syntax. Example: <chart>{ "type": "bar", ... }</chart>. If a follow-up asks for a deep-dive, respond ONLY with a strictly valid JSON object: { "title": "...", "sections": [ { "heading": "...", "content": "..." } ] }. Otherwise, provide a concise answer in Markdown. Now, generate the initial analysis hub JSON response in ${selectedLanguage}.`;
-                    chatSession = geminiModel.startChat();
-                    try {
-                        const result = await chatSession.sendMessage(initialPrompt);
-                        const responseText = await result.response.text();
-                        const cleanedJsonString = extractJson(responseText);
-                        JSON.parse(cleanedJsonString);
-                        await saveData("chats", moduleId, { history: [{ role: 'user', parts: [{ text: initialPrompt }] }, { role: 'model', parts: [{ text: cleanedJsonString }] }], fileName: file.name });
-                    } catch (err) { 
-                        console.error("Error initial analysis:", err, "Response received:", err.response ? await err.response.text() : "No response text"); 
-                        showAnalysisError("AI trả về phản hồi không hợp lệ. Vui lòng thử lại."); 
-                        await saveData("chats", moduleId, { history:[], fileName:'', activeArchiveId: null }); 
-                    }
-                };
-                if (['csv', 'txt'].includes(file.name.split('.').pop().toLowerCase())) reader.readAsText(file); else reader.readAsArrayBuffer(file);
             });
             
             form.addEventListener('submit', async e => {
                 e.preventDefault();
                 const userQuery = e.detail?.query || inputEl.value.trim();
                 if (!userQuery || !chatSession || isThinking) return;
+                
                 isThinking = true;
                 const submitButton = form.querySelector('button');
+                const originalButtonHTML = submitButton.innerHTML;
                 const suggestionsGroup = document.getElementById('hub-suggestions-group');
                 submitButton.disabled = true;
+                submitButton.innerHTML = `<div class="small-spinner"></div>`;
                 suggestionsGroup.querySelectorAll('button').forEach(btn => btn.disabled = true);
+
                 const historyWithUserMsg = [...history, { role: 'user', parts: [{ text: userQuery }] }];
                 await saveData("chats", moduleId, { history: historyWithUserMsg });
+                 
                 try {
                     const result = await chatSession.sendMessage([{ text: userQuery }]);
                     const fullResponseText = await result.response.text();
@@ -1040,6 +1212,11 @@
                     console.error("Error case trainer chat:", err);
                     const errorHistory = [...historyWithUserMsg, { role: 'model', parts: [{ text: "Lỗi: Không thể nhận phản hồi." }] }];
                     await saveData("chats", moduleId, { history: errorHistory });
+                } finally {
+                    isThinking = false;
+                    submitButton.disabled = false;
+                    submitButton.innerHTML = originalButtonHTML;
+                    suggestionsGroup.querySelectorAll('button').forEach(btn => btn.disabled = false);
                 }
             });
 
