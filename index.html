@@ -957,7 +957,7 @@
                     responseObj.curatedSuggestions.forEach(sugg => {
                         const button = document.createElement('button');
                         let icon = '❓';
-                        if (sugg.type === 'chart') icon = '📈';
+                        if (sugg.type === 'chart') icon = '�';
                         else if (sugg.type === 'deep-dive') icon = '🔬';
                         button.innerHTML = `<span>${icon}</span> ${sugg.text}`;
                         button.onclick = (e) => {
@@ -976,7 +976,6 @@
                 const data = docSnapshot.data();
                 const sessionExists = data && data.history && data.history.length > 0;
                 
-                // ***LOGIC CHANGE***: Sync active archive ID from Firestore
                 currentArchiveId = (data && data.activeArchiveId) ? data.activeArchiveId : null;
                 
                 history = getValidHistoryForChat(sessionExists ? data.history : []);
@@ -1035,8 +1034,10 @@
                 await archiveCurrentSession(moduleId);
                 const file = fileInput.files[0];
                 if (!file) return;
-                await saveData("chats", moduleId, { history: [], fileName: file.name });
-                // The rest of the function remains the same, onSnapshot will handle the view change.
+                
+                // Start with a clean slate, removing any potential old activeArchiveId
+                await saveData("chats", moduleId, { history: [], fileName: file.name, activeArchiveId: null });
+                
                 uploadSection.style.display = 'none';
                 analysisHub.style.display = 'block';
                 const mainInsightContainer = document.querySelector('#analysis-hub .main-insight-card-container');
@@ -1046,6 +1047,7 @@
                     document.getElementById('hub-suggestions-group').innerHTML = '';
                     if(contentArea) contentArea.innerHTML = '';
                 }
+
                 const reader = new FileReader();
                 reader.onload = async (e) => {
                     let dataContext = '';
@@ -1056,17 +1058,51 @@
                         else if (['xlsx', 'xls'].includes(fileExtension)) { const wb = XLSX.read(fileContent, {type:'array'}); wb.SheetNames.forEach(sn => { dataContext += `--- SHEET: ${sn} ---\n${XLSX.utils.sheet_to_csv(wb.Sheets[sn])}\n`; }); }
                         else if (fileExtension === 'pdf') { const pdf = await pdfjsLib.getDocument(new Uint8Array(fileContent)).promise; for (let i = 1; i <= pdf.numPages; i++) { const page = await pdf.getPage(i); const tc = await page.getTextContent(); dataContext += tc.items.map(item => item.str).join(' ') + '\n'; } }
                         else if (fileExtension === 'docx') { const res = await mammoth.extractRawText({arrayBuffer: fileContent}); dataContext = res.value; }
-                    } catch (err) { showAnalysisError(`Lỗi khi đọc file: ${err.message}`); await saveData(moduleId, { history:[], fileName:'' }); return; }
-                    if (!dataContext) { showAnalysisError("Không thể đọc file hoặc định dạng không được hỗ trợ."); await saveData(moduleId, { history:[], fileName:'' }); return; }
-                    const initialPrompt = `...`; // Prompt remains same
+                    } catch (err) { 
+                        showAnalysisError(`Lỗi khi đọc file: ${err.message}`); 
+                        await saveData("chats", moduleId, { history:[], fileName:'', activeArchiveId: null }); 
+                        return; 
+                    }
+                    if (!dataContext) { 
+                        showAnalysisError("Không thể đọc file hoặc định dạng không được hỗ trợ."); 
+                        await saveData("chats", moduleId, { history:[], fileName:'', activeArchiveId: null }); 
+                        return; 
+                    }
+                    
+                    // ***FIX 1: RESTORE FULL PROMPT***
+                    const initialPrompt = `You are an expert Business Analyst assistant. Your response language MUST be ${selectedLanguage}. The user has uploaded the following data:
+                    ---DATA---
+                    ${dataContext.substring(0, 100000)}
+                    ---END DATA---
+                    Your entire response MUST be a single, strictly valid, data-only JSON object, with no surrounding text, markdown, or explanations.
+                    The JSON object must have the following keys:
+                    - "mainInsight": (String) A single, most important or surprising insight from the data.
+                    - "keyMetrics": (Array of {label: String, value: String}) 2-3 of the most important high-level metrics from the data.
+                    - "curatedSuggestions": (Array of {type: String, text: String}) 3-4 of the best and most relevant follow-up questions. The type must be one of 'chart', 'deep-dive', or 'question'.
+                    **Follow-up Response Rules (Very Important):**
+                    - If a follow-up asks for a chart, respond ONLY with a strictly valid Chart.js (v3+) JSON object inside <chart> tags. Example: <chart>{ "type": "bar", ... }</chart>
+                    - If a follow-up asks for a deep-dive, respond ONLY with a strictly valid JSON object: { "title": "...", "sections": [ { "heading": "...", "content": "..." } ] }.
+                    - Otherwise, provide a concise answer in Markdown.
+                    Now, generate the initial analysis hub JSON response in ${selectedLanguage}.`;
+
                     chatSession = geminiModel.startChat();
                     try {
                         const result = await chatSession.sendMessage(initialPrompt);
                         const responseText = await result.response.text();
                         const cleanedJsonString = extractJson(responseText);
-                        JSON.parse(cleanedJsonString);
-                        await saveData("chats", moduleId, { history: [{role:'user', parts:[{text:initialPrompt}]}, {role:'model', parts:[{text:cleanedJsonString}]}], fileName: file.name });
-                    } catch (err) { console.error("Error initial analysis:", err); showAnalysisError("AI trả về phản hồi không hợp lệ."); await saveData(moduleId, { history:[], fileName:'' }); }
+                        JSON.parse(cleanedJsonString); // Validate before saving
+                        await saveData("chats", moduleId, { 
+                            history: [
+                                { role: 'user', parts: [{ text: initialPrompt }] },
+                                { role: 'model', parts: [{ text: cleanedJsonString }] }
+                            ], 
+                            fileName: file.name 
+                        });
+                    } catch (err) { 
+                        console.error("Error initial analysis:", err, "Response received:", err.response ? await err.response.text() : "No response text"); 
+                        showAnalysisError("AI trả về phản hồi không hợp lệ. Vui lòng thử lại."); 
+                        await saveData("chats", moduleId, { history:[], fileName:'', activeArchiveId: null }); 
+                    }
                 };
                 if (['csv', 'txt'].includes(file.name.split('.').pop().toLowerCase())) reader.readAsText(file); else reader.readAsArrayBuffer(file);
             });
@@ -1077,9 +1113,13 @@
                 if (!userQuery || !chatSession || isThinking) return;
                 
                 isThinking = true;
-                //... a lot of UI state changes for loading ...
+                const submitButton = form.querySelector('button');
+                const suggestionsGroup = document.getElementById('hub-suggestions-group');
+                submitButton.disabled = true;
+                suggestionsGroup.querySelectorAll('button').forEach(btn => btn.disabled = true);
+
                 const historyWithUserMsg = [...history, { role: 'user', parts: [{ text: userQuery }] }];
-                await saveData("chats", moduleId, { history: historyWithUserMsg }); // onSnapshot will show user message
+                await saveData("chats", moduleId, { history: historyWithUserMsg });
                  
                 try {
                     const result = await chatSession.sendMessage([{ text: userQuery }]);
@@ -1090,10 +1130,11 @@
                     console.error("Error case trainer chat:", err);
                     const errorHistory = [...historyWithUserMsg, { role: 'model', parts: [{ text: "Lỗi: Không thể nhận phản hồi." }] }];
                     await saveData("chats", moduleId, { history: errorHistory });
-                } // isThinking is reset by onSnapshot
+                } finally {
+                    // onSnapshot will reset isThinking and re-enable buttons
+                }
             });
 
-             // ***LOGIC CHANGE***: Smart save/update button
              clearBtn.addEventListener('click', async () => {
                 const isUpdating = currentArchiveId !== null;
                 let message = "Bạn có muốn LƯU TRỮ phiên làm việc này và bắt đầu một phiên mới không?";
@@ -1152,7 +1193,7 @@
             <div id="case-trainer" class="module-content">
                  <div class="module-header-wrapper">
                     <h1 class="module-header">AI Case Trainer</h1>
-                    <button id="clear-case-trainer-history" class="btn-icon btn-danger" title="Lưu trữ hoặc Cập nhật phiên và Bắt đầu lại"><i class="fa-solid fa-floppy-disk"></i></button>
+                    <button id="clear-case-trainer-history" class="btn-icon" title="Lưu trữ hoặc Cập nhật phiên và Bắt đầu lại"><i class="fa-solid fa-floppy-disk"></i></button>
                  </div>
                  <p class="module-subheader">Tải lên file dữ liệu và để AI trở thành trợ lý phân tích của bạn.</p>
                  
@@ -1211,3 +1252,4 @@
     </script>
 </body>
 </html>
+�
