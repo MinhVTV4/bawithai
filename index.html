@@ -73,6 +73,12 @@
         .module-header { font-size: 2rem; font-weight: bold; color: var(--sidebar-bg); margin: 0; }
         .module-subheader { font-size: 1rem; color: #64748b; margin-bottom: 30px; }
         .controls-box, #analysis-hub, .chat-container { width: 100%; max-width: 800px; margin-left: auto; margin-right: auto;}
+        
+        /* CHANGE: Position the Case Trainer button next to the title */
+        .case-trainer-header {
+            justify-content: flex-start;
+            gap: 20px;
+        }
 
         button { padding: 10px 20px; background-color: var(--accent-color); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 1rem; transition: background-color 0.3s ease; display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-weight: 600; }
         button:hover { background-color: var(--accent-hover); }
@@ -99,17 +105,44 @@
         /* Right Panel Sections */
         .right-panel-section { border-bottom: 1px solid #e2e8f0; }
         .right-panel-header { padding: 20px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
-        .right-panel-header h3 { margin: 0; font-size: 1.25rem; color: var(--sidebar-bg); }
+        .right-panel-header h3 { margin: 0; font-size: 1.25rem; color: var(--sidebar-bg); flex-grow: 1;}
         .right-panel-header .toggle-icon { transition: transform 0.3s ease; }
         .right-panel-section.collapsed .toggle-icon { transform: rotate(-90deg); }
         .right-panel-content { padding: 0 20px 20px 20px; display: block; }
         .right-panel-section.collapsed .right-panel-content { display: none; }
-
-        #notebook-content { flex-grow: 1; display: flex; flex-direction: column; }
-        #scratchpad-textarea { width: 100%; height: 100%; border: none; resize: none; font-family: 'Inter', sans-serif; font-size: 0.95rem; color: var(--text-dark); line-height: 1.6; background-color: transparent; }
+        
+        #notebook-container {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0; 
+        }
+        #notebook-content { 
+            flex-grow: 1; 
+            display: flex; 
+            flex-direction: column; 
+        }
+        #scratchpad-textarea { 
+            width: 100%; 
+            height: 100%; 
+            border: none; 
+            resize: none; 
+            font-family: 'Inter', sans-serif; 
+            font-size: 0.95rem; 
+            color: var(--text-dark); 
+            line-height: 1.6; 
+            background-color: transparent; 
+        }
         #scratchpad-textarea:focus { outline: none; }
-        #notebook-footer { padding: 10px 20px; font-size: 0.8rem; color: #94a3b8; font-style: italic; align-self: flex-end; }
-        #notebook-status { transition: color 0.3s ease; }
+        
+        #notebook-status { 
+            font-size: 0.8rem; 
+            color: #94a3b8;
+            font-style: italic;
+            margin-left: 10px;
+            transition: color 0.3s ease; 
+        }
+
 
         #session-history-list { max-height: 300px; overflow-y: auto; }
         .history-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 8px; border-bottom: 1px solid #f1f5f9; cursor: pointer; border-radius: 4px; }
@@ -214,13 +247,11 @@
             <div id="notebook-container" class="right-panel-section">
                 <div class="right-panel-header" id="notebook-header">
                     <h3>Sổ Tay Phân Tích</h3>
+                    <span id="notebook-status"></span>
                      <button class="btn-subtle toggle-icon"><i class="fa-solid fa-chevron-down"></i></button>
                 </div>
                 <div class="right-panel-content" id="notebook-content">
                     <textarea id="scratchpad-textarea" placeholder="Ghi chú nhanh những insight quan trọng, ý tưởng, hoặc dàn ý tại đây..."></textarea>
-                     <div id="notebook-footer">
-                        <span id="notebook-status"></span>
-                    </div>
                 </div>
             </div>
         </aside>
@@ -392,7 +423,8 @@
 
         function setupRightPanel() {
             document.querySelectorAll('.right-panel-header').forEach(header => {
-                header.addEventListener('click', () => {
+                header.addEventListener('click', (e) => {
+                    if (e.target.id === 'notebook-status') return;
                     header.parentElement.classList.toggle('collapsed');
                 });
             });
@@ -468,19 +500,17 @@
                             <button class="btn-subtle btn-danger delete-history-btn" data-id="${docSnap.id}" title="Xóa vĩnh viễn phiên này"><i class="fa-solid fa-trash-can"></i></button>
                         </div>`;
                     
-                    // Main click event to load session
                     itemEl.addEventListener('click', async (e) => {
-                         if (e.target.closest('.delete-history-btn')) return; // Prevent loading when delete is clicked
+                         if (e.target.closest('.delete-history-btn')) return;
                          const archiveId = docSnap.id;
-                         const moduleToLoad = data.module || 'case-trainer'; // Default to case-trainer
+                         const moduleToLoad = data.module || 'case-trainer';
                          if (confirm(`Bạn có muốn tải lại phiên "${data.title}" không? Phiên làm việc hiện tại sẽ được lưu trữ.`)) {
                            await loadArchivedSession(moduleToLoad, archiveId);
                         }
                     });
                     
-                    // Delete button event
                     itemEl.querySelector('.delete-history-btn').addEventListener('click', async (e) => {
-                        e.stopPropagation(); // Prevent the main click event
+                        e.stopPropagation();
                         if (confirm(`Bạn có chắc muốn XÓA vĩnh viễn phiên "${data.title}" không? Hành động này không thể hoàn tác.`)) {
                             const archiveId = e.currentTarget.dataset.id;
                             const archiveDocRef = doc(db, 'users', currentUser.uid, 'archives', archiveId);
@@ -501,7 +531,6 @@
 
             if (activeSessionDoc.exists() && activeSessionDoc.data().history?.length > 1) {
                 const dataToArchive = activeSessionDoc.data();
-                // Avoid archiving a session that is already an active archive
                 if (dataToArchive.activeArchiveId) return false; 
 
                 let title = dataToArchive.fileName ? `Phân tích: ${dataToArchive.fileName}` : `Phiên lúc ${new Date().toLocaleString('vi-VN')}`;
@@ -530,11 +559,10 @@
             if (archiveDoc.exists()) {
                 const archivedData = archiveDoc.data();
                 
-                // ***LOGIC CHANGE***: Add activeArchiveId to the data being loaded
                 const dataToLoad = {
                     history: archivedData.history || [], 
                     fileName: archivedData.fileName || '',
-                    activeArchiveId: archiveId // This tells the app which archive is active
+                    activeArchiveId: archiveId
                 };
 
                 await setDoc(doc(db, "users", currentUser.uid, "chats", moduleId), dataToLoad);
@@ -549,7 +577,6 @@
         }
         
         function setupLearningRoom() {
-            // This function's logic remains largely unchanged, but we can improve the UX
             const moduleId = 'learning-room';
             const historyEl = document.getElementById(`${moduleId}-chat-history`);
             const form = document.getElementById(`${moduleId}-chat-form`);
@@ -617,7 +644,6 @@
                 submitButton.innerHTML = `<div class="small-spinner"></div>`;
 
                 const historyWithUserMsg = [...history, { role: 'user', parts: [{ text: userQuery }] }];
-                // No need to save here, will save with AI response
 
                 try {
                     const result = await chatSession.sendMessage(userQuery);
@@ -630,7 +656,6 @@
                     const errorHistory = [...historyWithUserMsg, { role: 'model', parts: [{ text: "Lỗi: Không thể nhận phản hồi từ AI." }] }];
                     await saveData("chats", moduleId, { history: errorHistory });
                 } finally {
-                    // onSnapshot will handle re-render, just re-enable button
                     isThinking = false;
                     submitButton.disabled = false;
                     submitButton.innerHTML = originalButtonHTML;
@@ -645,7 +670,6 @@
         }
         
         function setupMockInterview() {
-            // This function's logic remains largely unchanged
             const moduleId = 'mock-interview';
             const setupSection = document.getElementById('interview-setup-section');
             const chatSection = document.getElementById('interview-chat-section');
@@ -957,7 +981,7 @@
                     responseObj.curatedSuggestions.forEach(sugg => {
                         const button = document.createElement('button');
                         let icon = '❓';
-                        if (sugg.type === 'chart') icon = '�';
+                        if (sugg.type === 'chart') icon = '📈';
                         else if (sugg.type === 'deep-dive') icon = '🔬';
                         button.innerHTML = `<span>${icon}</span> ${sugg.text}`;
                         button.onclick = (e) => {
@@ -1035,7 +1059,6 @@
                 const file = fileInput.files[0];
                 if (!file) return;
                 
-                // Start with a clean slate, removing any potential old activeArchiveId
                 await saveData("chats", moduleId, { history: [], fileName: file.name, activeArchiveId: null });
                 
                 uploadSection.style.display = 'none';
@@ -1069,7 +1092,6 @@
                         return; 
                     }
                     
-                    // ***FIX 1: RESTORE FULL PROMPT***
                     const initialPrompt = `You are an expert Business Analyst assistant. Your response language MUST be ${selectedLanguage}. The user has uploaded the following data:
                     ---DATA---
                     ${dataContext.substring(0, 100000)}
@@ -1090,7 +1112,7 @@
                         const result = await chatSession.sendMessage(initialPrompt);
                         const responseText = await result.response.text();
                         const cleanedJsonString = extractJson(responseText);
-                        JSON.parse(cleanedJsonString); // Validate before saving
+                        JSON.parse(cleanedJsonString);
                         await saveData("chats", moduleId, { 
                             history: [
                                 { role: 'user', parts: [{ text: initialPrompt }] },
@@ -1130,8 +1152,6 @@
                     console.error("Error case trainer chat:", err);
                     const errorHistory = [...historyWithUserMsg, { role: 'model', parts: [{ text: "Lỗi: Không thể nhận phản hồi." }] }];
                     await saveData("chats", moduleId, { history: errorHistory });
-                } finally {
-                    // onSnapshot will reset isThinking and re-enable buttons
                 }
             });
 
@@ -1164,7 +1184,7 @@
                     } else {
                         let title = dataToSave.fileName ? `Phân tích: ${dataToSave.fileName}` : `Phiên lúc ${new Date().toLocaleString('vi-VN')}`;
                         const archiveData = { ...dataToSave, title: title, timestamp: serverTimestamp(), module: moduleId };
-                        delete archiveData.activeArchiveId; // Don't save this field in archives
+                        delete archiveData.activeArchiveId;
                         await addDoc(collection(db, 'users', currentUser.uid, 'archives'), archiveData);
                         alert("Phiên làm việc đã được lưu trữ.");
                     }
@@ -1172,7 +1192,6 @@
                     alert(isUpdating ? `Không có thay đổi để cập nhật cho ${sessionTitle}.` : "Không có nội dung để lưu trữ. Bắt đầu phiên mới.");
                 }
 
-                // Common Reset Logic
                 await saveData("chats", moduleId, { history: [], fileName: '', activeArchiveId: null });
                 fileInput.value = '';
                 if(fileUploadText) fileUploadText.textContent = 'Nhấp để chọn file CSV, Excel, PDF hoặc DOCX';
@@ -1191,7 +1210,8 @@
                 </div>
             </div>
             <div id="case-trainer" class="module-content">
-                 <div class="module-header-wrapper">
+                 <!-- CHANGE: Add a specific class to this wrapper -->
+                 <div class="module-header-wrapper case-trainer-header">
                     <h1 class="module-header">AI Case Trainer</h1>
                     <button id="clear-case-trainer-history" class="btn-icon" title="Lưu trữ hoặc Cập nhật phiên và Bắt đầu lại"><i class="fa-solid fa-floppy-disk"></i></button>
                  </div>
@@ -1252,4 +1272,3 @@
     </script>
 </body>
 </html>
-�
