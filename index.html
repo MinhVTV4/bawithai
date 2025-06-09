@@ -72,7 +72,7 @@
         .module-header-wrapper { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
         .module-header { font-size: 2rem; font-weight: bold; color: var(--sidebar-bg); margin: 0; }
         .module-subheader { font-size: 1rem; color: #64748b; margin-bottom: 30px; }
-        .controls-box, #analysis-hub, .chat-container { width: 100%; max-width: 900px; margin-left: auto; margin-right: auto;}
+        .controls-box, #analysis-hub, .chat-container { width: 100%; max-width: 800px; margin-left: auto; margin-right: auto;}
 
         button { padding: 10px 20px; background-color: var(--accent-color); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 1rem; transition: background-color 0.3s ease; display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-weight: 600; }
         button:hover { background-color: var(--accent-hover); }
@@ -104,8 +104,8 @@
         .right-panel-section.collapsed .toggle-icon { transform: rotate(-90deg); }
         .right-panel-content { padding: 0 20px 20px 20px; display: block; }
         .right-panel-section.collapsed .right-panel-content { display: none; }
-        #notebook-container { flex-grow: 1; display: flex; flex-direction: column; }
-        #notebook-content { flex-grow: 1; display: flex; }
+
+        #notebook-content { flex-grow: 1; display: flex; flex-direction: column; }
         #scratchpad-textarea { width: 100%; height: 100%; border: none; resize: none; font-family: 'Inter', sans-serif; font-size: 0.95rem; color: var(--text-dark); line-height: 1.6; background-color: transparent; }
         #scratchpad-textarea:focus { outline: none; }
         #notebook-footer { padding: 10px 20px; font-size: 0.8rem; color: #94a3b8; font-style: italic; align-self: flex-end; }
@@ -214,7 +214,7 @@
                     <h3>Sổ Tay Phân Tích</h3>
                      <button class="btn-subtle toggle-icon"><i class="fa-solid fa-chevron-down"></i></button>
                 </div>
-                <div id="notebook-content" class="right-panel-content">
+                <div class="right-panel-content" id="notebook-content">
                     <textarea id="scratchpad-textarea" placeholder="Ghi chú nhanh những insight quan trọng, ý tưởng, hoặc dàn ý tại đây..."></textarea>
                      <div id="notebook-footer">
                         <span id="notebook-status"></span>
@@ -1109,7 +1109,8 @@
             });
 
              clearBtn.addEventListener('click', async () => {
-                if(confirm("Bạn có chắc muốn xóa phiên làm việc hiện tại không? Hành động này không thể hoàn tác và không lưu vào lịch sử.")){
+                if (confirm("Bạn có chắc muốn lưu trữ phiên này và bắt đầu lại không?")) {
+                    await archiveCurrentSession(moduleId);
                     await saveData("chats", moduleId, { history: [], fileName: '' });
                     fileInput.value = '';
                     if(fileUploadText) fileUploadText.textContent = 'Nhấp để chọn file CSV, Excel, PDF hoặc DOCX';
@@ -1131,7 +1132,7 @@
             <div id="case-trainer" class="module-content">
                  <div class="module-header-wrapper">
                     <h1 class="module-header">AI Case Trainer</h1>
-                    <button id="clear-case-trainer-history" class="btn-icon btn-danger" title="Xóa phiên hiện tại"><i class="fa-solid fa-trash-can"></i></button>
+                    <button id="clear-case-trainer-history" class="btn-icon btn-danger" title="Lưu trữ và Bắt đầu lại"><i class="fa-solid fa-box-archive"></i></button>
                  </div>
                  <p class="module-subheader">Tải lên file dữ liệu và để AI trở thành trợ lý phân tích của bạn.</p>
                  
@@ -1190,3 +1191,4 @@
     </script>
 </body>
 </html>
+"
