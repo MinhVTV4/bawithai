@@ -482,31 +482,410 @@
         }
 
         function setupScratchpad() {
-            // Unchanged - this function is complete and correct.
+            const textarea = document.getElementById('scratchpad-textarea');
+            const statusEl = document.getElementById('notebook-status');
+            if (!textarea || !statusEl) return;
+            const moduleId = 'scratchpad';
+            const collectionName = 'notebooks';
+            let localContent = '';
+            const debouncedSave = debounce(async (content) => {
+                if (!currentUser) return;
+                try {
+                    await saveData(collectionName, moduleId, { content });
+                    statusEl.textContent = 'Đã lưu';
+                    statusEl.style.color = '#94a3b8';
+                } catch (error) {
+                    console.error("Error saving scratchpad:", error);
+                    statusEl.textContent = 'Lỗi lưu';
+                    statusEl.style.color = 'var(--danger-color)';
+                }
+            }, 1500);
+            textarea.addEventListener('input', () => {
+                localContent = textarea.value;
+                statusEl.textContent = 'Đang lưu...';
+                statusEl.style.color = 'var(--accent-color)';
+                debouncedSave(localContent);
+            });
+            const docRef = doc(db, "users", currentUser.uid, collectionName, moduleId);
+            const unsub = onSnapshot(docRef, (doc) => {
+                const data = doc.data();
+                if (data && data.content && data.content !== localContent) {
+                    textarea.value = data.content;
+                    localContent = data.content;
+                }
+                statusEl.textContent = 'Đã đồng bộ';
+                statusEl.style.color = '#94a3b8';
+            });
+            unsubscribeListeners.push(unsub);
         }
 
         function setupSessionHistory() {
-            // Unchanged - this function is complete and correct.
+            const historyListEl = document.getElementById('session-history-list');
+            if (!historyListEl) return;
+            const archivesCollectionRef = collection(db, 'users', currentUser.uid, 'archives');
+            const unsub = onSnapshot(query(archivesCollectionRef, orderBy('timestamp', 'desc')), (snapshot) => {
+                historyListEl.innerHTML = '';
+                if (snapshot.empty) {
+                    historyListEl.innerHTML = '<p style="padding: 12px 8px; font-size: 0.85rem; color: #64748b;">Chưa có phiên nào được lưu trữ.</p>';
+                    return;
+                }
+                snapshot.forEach(docSnap => {
+                    const data = docSnap.data();
+                    const itemEl = document.createElement('div');
+                    itemEl.className = 'history-item';
+                    const date = data.timestamp?.toDate().toLocaleString('vi-VN') || 'Không rõ ngày';
+                    itemEl.innerHTML = `<div class="history-item-info"><span class="history-item-title">${data.title || 'Phiên chưa đặt tên'}</span><span class="history-item-date">${date}</span></div><div class="history-item-actions"><button class="btn-subtle btn-danger delete-history-btn" data-id="${docSnap.id}" title="Xóa vĩnh viễn phiên này"><i class="fa-solid fa-trash-can"></i></button></div>`;
+                    itemEl.addEventListener('click', async (e) => {
+                         if (e.target.closest('.delete-history-btn')) return;
+                         const archiveId = docSnap.id;
+                         const moduleToLoad = data.module || 'case-trainer';
+                         if (confirm(`Bạn có muốn tải lại phiên "${data.title}" không? Phiên làm việc hiện tại sẽ được lưu trữ.`)) {
+                           await loadArchivedSession(moduleToLoad, archiveId);
+                        }
+                    });
+                    itemEl.querySelector('.delete-history-btn').addEventListener('click', async (e) => {
+                        e.stopPropagation();
+                        if (confirm(`Bạn có chắc muốn XÓA vĩnh viễn phiên "${data.title}" không? Hành động này không thể hoàn tác.`)) {
+                            const archiveId = e.currentTarget.dataset.id;
+                            const archiveDocRef = doc(db, 'users', currentUser.uid, 'archives', archiveId);
+                            await deleteDoc(archiveDocRef);
+                        }
+                    });
+                    historyListEl.appendChild(itemEl);
+                });
+            });
+            unsubscribeListeners.push(unsub);
         }
 
         function setupBookmarkedPrompts() {
-            // Unchanged - this function is complete and correct.
+            const listEl = document.getElementById('bookmarked-prompts-list');
+            if (!listEl) return;
+            const collectionRef = collection(db, 'users', currentUser.uid, 'bookmarked_prompts');
+            const unsub = onSnapshot(query(collectionRef, orderBy('savedAt', 'desc')), (snapshot) => {
+                listEl.innerHTML = '';
+                if (snapshot.empty) {
+                    listEl.innerHTML = '<p style="padding: 12px 8px; font-size: 0.85rem; color: #64748b;">Chưa có gợi ý nào được lưu.</p>';
+                    return;
+                }
+                snapshot.forEach(docSnap => {
+                    const data = docSnap.data();
+                    const itemEl = document.createElement('div');
+                    itemEl.className = 'bookmark-item';
+                    itemEl.innerHTML = `<div class="bookmark-item-info"><span class="bookmark-item-text">${data.promptText}</span></div><div class="bookmark-item-actions"><button class="btn-subtle btn-danger delete-bookmark-btn" title="Xóa gợi ý này"><i class="fa-solid fa-trash-can"></i></button></div>`;
+                    itemEl.addEventListener('click', (e) => {
+                        if (e.target.closest('.delete-bookmark-btn')) return;
+                        const chatInput = document.getElementById('case-trainer-chat-input');
+                        if (chatInput) {
+                            chatInput.value = data.promptText;
+                            chatInput.focus();
+                        }
+                    });
+                    itemEl.querySelector('.delete-bookmark-btn').addEventListener('click', async (e) => {
+                        e.stopPropagation();
+                        const docRef = doc(db, 'users', currentUser.uid, 'bookmarked_prompts', docSnap.id);
+                        await deleteDoc(docRef);
+                    });
+                    listEl.appendChild(itemEl);
+                });
+            });
+            unsubscribeListeners.push(unsub);
         }
 
         async function archiveCurrentSession(moduleId) {
-            // Unchanged - this function is complete and correct.
+            if (!currentUser) return false;
+            const activeSessionRef = doc(db, 'users', currentUser.uid, 'chats', moduleId);
+            const activeSessionDoc = await getDoc(activeSessionRef);
+            if (activeSessionDoc.exists() && activeSessionDoc.data().history?.length > 1) {
+                const dataToArchive = activeSessionDoc.data();
+                if (dataToArchive.activeArchiveId) return false; 
+                let title = dataToArchive.fileName ? `Phân tích: ${dataToArchive.fileName}` : `Phiên lúc ${new Date().toLocaleString('vi-VN')}`;
+                const archiveData = { ...dataToArchive, title: title, timestamp: serverTimestamp(), module: moduleId };
+                await addDoc(collection(db, 'users', currentUser.uid, 'archives'), archiveData);
+                return true;
+            }
+            return false;
         }
 
         async function loadArchivedSession(moduleId, archiveId) {
-            // Unchanged - this function is complete and correct.
+            if (!currentUser || !archiveId) return;
+            await archiveCurrentSession(moduleId);
+            const archiveDocRef = doc(db, 'users', currentUser.uid, 'archives', archiveId);
+            const archiveDoc = await getDoc(archiveDocRef);
+            if (archiveDoc.exists()) {
+                const archivedData = archiveDoc.data();
+                const dataToLoad = { history: archivedData.history || [], fileName: archivedData.fileName || '', activeArchiveId: archiveId };
+                await setDoc(doc(db, "users", currentUser.uid, "chats", moduleId), dataToLoad);
+                showModule(`#${moduleId}`);
+                alert('Đã tải lại phiên làm việc. Giao diện sẽ được làm mới.');
+            } else {
+                console.error("Could not find archive document with ID:", archiveId);
+                alert("Lỗi: Không thể tìm thấy phiên lưu trữ.");
+            }
         }
         
         function setupLearningRoom() {
-             // Unchanged - this function is complete and correct.
+            const moduleId = 'learning-room';
+            const historyEl = document.getElementById(`${moduleId}-chat-history`);
+            const form = document.getElementById(`${moduleId}-chat-form`);
+            const input = document.getElementById(`${moduleId}-chat-input`);
+            const clearBtn = document.getElementById(`clear-${moduleId}-history`);
+            if(!historyEl || !form || !input || !clearBtn) return;
+            
+            let history = [];
+            let chatSession = null;
+            let isThinking = false;
+            const systemInstruction = {
+                role: "system",
+                parts: [{ text: "You are a helpful assistant for Business Analytics students. All your responses must be in Vietnamese."}]
+            };
+
+            const unsub = onSnapshot(doc(db, "users", currentUser.uid, "chats", moduleId), (doc) => {
+                isThinking = false;
+                historyEl.innerHTML = '';
+                const data = doc.data();
+                history = getValidHistoryForChat((data && data.history) ? data.history : []);
+                
+                chatSession = geminiModel.startChat({ history, systemInstruction });
+
+                if (history.length > 0) {
+                    history.forEach(msg => {
+                        const sender = msg.role === 'user' ? 'user' : 'ai';
+                        const messageDiv = document.createElement('div');
+                        messageDiv.className = `chat-message ${sender}-message`;
+                        messageDiv.innerHTML = window.marked.parse(msg.parts[0].text);
+                        historyEl.appendChild(messageDiv);
+                    });
+                } else {
+                     const aiMsgContainer = document.createElement('div');
+                     aiMsgContainer.className = 'chat-message ai-message';
+                     aiMsgContainer.innerHTML = window.marked.parse("Xin chào! Tôi là trợ lý học tập BA của bạn. Bạn muốn hỏi về chủ đề gì hôm nay?");
+                     historyEl.appendChild(aiMsgContainer);
+                }
+                 historyEl.scrollTop = historyEl.scrollHeight;
+            });
+            unsubscribeListeners.push(unsub);
+            
+            form.addEventListener('submit', async e => {
+                e.preventDefault();
+                const userQuery = input.value.trim();
+                if (!userQuery || !geminiModel || isThinking) return;
+                
+                isThinking = true;
+                const submitButton = form.querySelector('button');
+                const originalButtonHTML = submitButton.innerHTML;
+                
+                input.value = '';
+                submitButton.disabled = true;
+                submitButton.innerHTML = `<div class="small-spinner"></div>`;
+
+                const historyWithUserMsg = [...history, { role: 'user', parts: [{ text: userQuery }] }];
+
+                try {
+                    await saveData("chats", moduleId, { history: historyWithUserMsg });
+                    const result = await chatSession.sendMessage(userQuery);
+                    const fullResponse = await result.response.text();
+                    
+                    const finalHistory = [...historyWithUserMsg, { role: 'model', parts: [{ text: fullResponse }] }];
+                    await saveData("chats", moduleId, { history: finalHistory });
+                } catch (error) {
+                    console.error("Error sending message:", error);
+                    const errorHistory = [...historyWithUserMsg, { role: 'model', parts: [{ text: "Lỗi: Không thể nhận phản hồi từ AI." }] }];
+                    await saveData("chats", moduleId, { history: errorHistory });
+                } finally {
+                    isThinking = false;
+                    submitButton.disabled = false;
+                    submitButton.innerHTML = originalButtonHTML;
+                }
+            });
+
+            clearBtn.addEventListener('click', () => {
+                if (confirm("Bạn có chắc muốn xóa cuộc trò chuyện này không?")) {
+                    saveData("chats", moduleId, { history: [] });
+                }
+            });
         }
         
         function setupMockInterview() {
-            // Unchanged - this function is complete and correct.
+            const moduleId = 'mock-interview';
+            const setupSection = document.getElementById('interview-setup-section');
+            const chatSection = document.getElementById('interview-chat-section');
+            const historyEl = document.getElementById(`${moduleId}-chat-history`);
+            const form = document.getElementById('interview-chat-input-form');
+            const inputEl = document.getElementById('interview-chat-input');
+            const clearBtn = document.getElementById(`clear-${moduleId}-history`);
+            const startBtn = document.getElementById('startInterviewButton');
+            const langGroup = document.getElementById('language-btn-group');
+            const topicGroup = document.getElementById('topic-btn-group');
+
+            if (!setupSection || !chatSection || !historyEl || !form || !inputEl || !clearBtn || !startBtn || !langGroup || !topicGroup) return;
+
+            let sessionState = { history: [], language: 'vietnamese', topic: null, inProgress: false };
+            let chatSession = null;
+            let isThinking = false;
+
+            const speech = window.speechSynthesis;
+            let voices = [];
+            function populateVoiceList() {
+                if (typeof speechSynthesis === 'undefined') return;
+                voices = speechSynthesis.getVoices();
+            }
+            populateVoiceList();
+            if (typeof speechSynthesis !== 'undefined' && speechSynthesis.onvoiceschanged !== undefined) {
+                speechSynthesis.onvoiceschanged = populateVoiceList;
+            }
+
+            function addSpeakButton(messageDiv, lang) {
+                if (!messageDiv || messageDiv.querySelector('.speak-btn')) return;
+                const speakBtn = document.createElement('button');
+                speakBtn.className = 'speak-btn';
+                speakBtn.innerHTML = '<i class="fa-solid fa-volume-high"></i>';
+                speakBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    speakText(messageDiv.innerText, lang);
+                }
+                messageDiv.appendChild(speakBtn);
+            }
+            
+            function speakText(text, lang) {
+                if (!speech || !text) return;
+                const utterance = new SpeechSynthesisUtterance(text);
+                const targetLang = lang === 'vietnamese' ? 'vi-VN' : 'en-US';
+                utterance.lang = targetLang;
+                let voice = voices.find(v => v.lang === targetLang && v.name.includes('Google')) || voices.find(v => v.lang === targetLang);
+                if (voice) utterance.voice = voice;
+                speech.cancel();
+                speech.speak(utterance);
+            }
+
+            const unsub = onSnapshot(doc(db, "users", currentUser.uid, "chats", moduleId), (docSnapshot) => {
+                historyEl.innerHTML = '';
+                isThinking = false;
+                const data = docSnapshot.data();
+                sessionState = data ? { ...{history:[], inProgress: false, language: 'vietnamese', topic: null}, ...data } : sessionState;
+                sessionState.history = getValidHistoryForChat(sessionState.history);
+
+                const systemInstruction = {
+                    role: "system",
+                    parts: [{ text: `You are an experienced hiring manager conducting an interview. You must use the ${sessionState.language} language for the entire conversation. Ask one question at a time.` }]
+                };
+                chatSession = geminiModel.startChat({ history: sessionState.history, systemInstruction });
+
+                if (sessionState.inProgress) {
+                    sessionState.history.forEach(msg => {
+                        if (msg.role === 'user' && msg.parts[0].text.startsWith('Start by introducing yourself')) return;
+
+                        const senderClass = msg.role === 'user' ? 'user-message' : 'ai-message';
+                        const messageDiv = document.createElement('div');
+                        messageDiv.className = `chat-message ${senderClass}`;
+                        messageDiv.innerHTML = window.marked.parse(msg.parts[0].text);
+                        historyEl.appendChild(messageDiv);
+                        
+                        if (msg.role === 'model') {
+                           addSpeakButton(messageDiv, sessionState.language);
+                        }
+                    });
+                     historyEl.scrollTop = historyEl.scrollHeight;
+                    setupSection.style.display = 'none';
+                    chatSection.style.display = 'block';
+                } else {
+                    setupSection.style.display = 'block';
+                    chatSection.style.display = 'none';
+                }
+            });
+            unsubscribeListeners.push(unsub);
+            
+            const checkSelections = () => { startBtn.disabled = !sessionState.topic; };
+            langGroup.addEventListener('click', (e) => { 
+                if (e.target.classList.contains('language-btn')) { 
+                    langGroup.querySelector('.selected')?.classList.remove('selected'); 
+                    e.target.classList.add('selected'); 
+                    sessionState.language = e.target.dataset.lang; 
+                } 
+            });
+            topicGroup.addEventListener('click', (e) => { 
+                if (e.target.classList.contains('topic-btn')) { 
+                    topicGroup.querySelector('.selected')?.classList.remove('selected'); 
+                    e.target.classList.add('selected'); 
+                    sessionState.topic = e.target.dataset.topic; 
+                    checkSelections();
+                } 
+            });
+
+            startBtn.addEventListener('click', async () => {
+                if (startBtn.disabled || isThinking) return;
+                
+                isThinking = true;
+                const submitButton = startBtn;
+                const originalButtonHTML = submitButton.innerHTML;
+                submitButton.disabled = true;
+                submitButton.innerHTML = `<div class="small-spinner"></div>`;
+
+                try {
+                    const systemInstruction = { role: "system", parts: [{ text: `You are an experienced hiring manager...` }] };
+                    sessionState.history = []; // Clear history before starting
+                    chatSession = geminiModel.startChat({ history: [], systemInstruction });
+                    
+                    const initialPrompt = `Start by introducing yourself in ${sessionState.language}. Then, ask the first question related to the topic: "${sessionState.topic}".`;
+                    
+                    const initialHistory = [ { role: 'user', parts: [{ text: initialPrompt }] } ];
+                    await saveData("chats", moduleId, { ...sessionState, history: initialHistory, inProgress: true });
+                    
+                    const result = await chatSession.sendMessage(initialPrompt);
+                    const fullResponseText = await result.response.text();
+                    
+                    const finalHistory = [...initialHistory, { role: 'model', parts: [{ text: fullResponseText }] } ];
+                    await saveData("chats", moduleId, { history: finalHistory });
+                    speakText(fullResponseText, sessionState.language);
+                } catch (error) {
+                    console.error("Error starting interview:", error);
+                    await saveData("chats", moduleId, { history: [], inProgress: false, topic: null });
+                } finally {
+                    isThinking = false;
+                    submitButton.disabled = false;
+                    submitButton.innerHTML = originalButtonHTML;
+                }
+            });
+
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const userResponse = inputEl.value.trim();
+                if (!userResponse || !chatSession || isThinking) return;
+                
+                isThinking = true;
+                const submitButton = form.querySelector('button');
+                const originalButtonHTML = submitButton.innerHTML;
+                inputEl.value = '';
+                submitButton.disabled = true;
+                submitButton.innerHTML = `<div class="small-spinner"></div>`;
+
+                const historyWithUserMsg = [...sessionState.history, { role: 'user', parts: [{ text: userResponse }] }];
+                await saveData("chats", moduleId, { history: historyWithUserMsg });
+
+                try {
+                    const result = await chatSession.sendMessage(userResponse);
+                    const fullResponseText = await result.response.text();
+                    const finalHistory = [...historyWithUserMsg, { role: 'model', parts: [{ text: fullResponseText }] }];
+                    await saveData("chats", moduleId, { history: finalHistory });
+                    speakText(fullResponseText, sessionState.language);
+                } catch (error) {
+                    console.error("Error in mock interview chat:", error);
+                    const errorHistory = [...historyWithUserMsg, { role: 'model', parts: [{ text: "Lỗi: Không thể nhận phản hồi." }] }];
+                    await saveData("chats", moduleId, { history: errorHistory });
+                } finally {
+                    isThinking = false;
+                    submitButton.disabled = false;
+                    submitButton.innerHTML = originalButtonHTML;
+                }
+            });
+
+            clearBtn.addEventListener('click', () => {
+                if (confirm("Bạn có chắc muốn kết thúc buổi phỏng vấn này không?")) {
+                    speech.cancel();
+                    topicGroup.querySelector('.selected')?.classList.remove('selected');
+                    startBtn.disabled = true;
+                    saveData("chats", moduleId, { history: [], inProgress: false, topic: null });
+                }
+            });
         }
         
         // =====================================================================
@@ -517,7 +896,6 @@
             // Main containers
             const analysisModeChooser = document.getElementById('analysis-mode-chooser');
             const quickAnalysisSection = document.getElementById('quick-analysis-section');
-            const guidedAnalysisSection = document.getElementById('guided-analysis-section');
             const analysisHub = document.getElementById('analysis-hub');
             
             // Buttons
@@ -531,7 +909,7 @@
             const fileUploadText = document.getElementById('file-upload-text');
             const form = document.getElementById('case-trainer-chat-form');
 
-            if(!analysisModeChooser || !quickAnalysisSection || !analysisHub) return;
+            if(!analysisModeChooser || !quickAnalysisSection || !analysisHub || !form) return;
 
             let history = [];
             let chatSession = null;
@@ -540,10 +918,8 @@
             let currentArchiveId = null; 
             let bookmarkedPrompts = new Set(); 
             let bookmarkedDocs = new Map();
-
-            // --- Event Listeners for new UI ---
+            
             startGuidedBtn.addEventListener('click', () => {
-                // Future logic for guided mode will go here
                 alert("Tính năng 'Phân tích có Hướng dẫn' đang được phát triển!");
             });
 
@@ -552,12 +928,10 @@
                 quickAnalysisSection.style.display = 'block';
             });
             
-            // Back button to return to mode chooser
             document.getElementById('back-to-mode-chooser').addEventListener('click', () => {
                 quickAnalysisSection.style.display = 'none';
                 analysisModeChooser.style.display = 'block';
             });
-
 
             const bookmarksCollectionRef = collection(db, 'users', currentUser.uid, 'bookmarked_prompts');
             const unsubBookmarks = onSnapshot(bookmarksCollectionRef, (snapshot) => {
@@ -732,7 +1106,7 @@
                             const button = document.createElement('button');
                             let icon = '❓';
                             if (sugg.type === 'chart') icon = '📈';
-                            else if (sugg.type === 'deep-dive') icon = '🔬';
+                            else if (sugg.type === 'deep-dive') icon = '�';
                             button.innerHTML = `<span>${icon}</span> ${sugg.text}`;
                             button.onclick = (e) => { if (isThinking) return; form.dispatchEvent(new CustomEvent('submit', { detail: { query: sugg.text, sourceButton: e.currentTarget } })); };
                             wrapper.appendChild(button);
@@ -1021,3 +1395,4 @@
     </script>
 </body>
 </html>
+�
