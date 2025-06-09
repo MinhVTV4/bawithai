@@ -147,8 +147,14 @@
         .history-item, .bookmark-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 8px; border-bottom: 1px solid #f1f5f9; cursor: pointer; border-radius: 4px; }
         .history-item:hover, .bookmark-item:hover { background-color: #f8fafc; }
         .history-item:last-child, .bookmark-item:last-child { border-bottom: none; }
-        .history-item-info, .bookmark-item-info { display: flex; flex-direction: column; flex-grow: 1; }
-        .history-item-title, .bookmark-item-text { font-weight: 500; color: var(--text-dark); }
+        .history-item-info, .bookmark-item-info { display: flex; flex-direction: column; flex-grow: 1; overflow: hidden; }
+        .history-item-title, .bookmark-item-text { 
+            font-weight: 500; 
+            color: var(--text-dark);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
         .history-item-date { font-size: 0.75rem; color: #64748b; }
         .history-item-actions, .bookmark-item-actions { display: flex; gap: 5px; opacity: 0; transition: opacity 0.2s; }
         .history-item:hover .history-item-actions, .bookmark-item:hover .bookmark-item-actions { opacity: 1; }
@@ -280,12 +286,6 @@
         import { getFirestore, doc, setDoc, onSnapshot, collection, addDoc, serverTimestamp, query, getDocs, getDoc, deleteDoc, orderBy, where } from "https://www.gstatic.com/firebasejs/11.9.0/firebase-firestore.js";
         import { getAI, getGenerativeModel } from "https://www.gstatic.com/firebasejs/11.9.0/firebase-ai.js";
 
-        // --- CẢNH BÁO BẢO MẬT ---
-        // API Key của bạn đang được đặt ở đây phía client.
-        // Điều này là bình thường với Firebase, nhưng BẮT BUỘC bạn phải thiết lập
-        // FIREBASE SECURITY RULES và APP CHECK trong Firebase Console để bảo vệ dữ liệu
-        // và ngăn chặn việc lạm dụng API. Không có các quy tắc này, bất kỳ ai cũng có thể
-        // truy cập và thay đổi dữ liệu của bạn.
         const firebaseConfig = {
             apiKey: "AIzaSyAP6gEJJrq0YE0lzYT-EeuskY0C1XHP9wo",
             authDomain: "bawithai.firebaseapp.com",
@@ -441,24 +441,22 @@
         function setupRightPanel() {
             document.querySelectorAll('.right-panel-header').forEach(header => {
                 header.addEventListener('click', (e) => {
-                    if (e.target.id === 'notebook-status') return;
+                    if (e.target.closest('.bookmark-btn') || e.target.id === 'notebook-status') return;
                     header.parentElement.classList.toggle('collapsed');
                 });
             });
             setupScratchpad();
             setupSessionHistory();
-            setupBookmarkedPrompts(); // NEW: Initialize bookmarks
+            setupBookmarkedPrompts();
         }
 
         function setupScratchpad() {
             const textarea = document.getElementById('scratchpad-textarea');
             const statusEl = document.getElementById('notebook-status');
             if (!textarea || !statusEl) return;
-
             const moduleId = 'scratchpad';
             const collectionName = 'notebooks';
             let localContent = '';
-
             const debouncedSave = debounce(async (content) => {
                 if (!currentUser) return;
                 try {
@@ -471,14 +469,12 @@
                     statusEl.style.color = 'var(--danger-color)';
                 }
             }, 1500);
-
             textarea.addEventListener('input', () => {
                 localContent = textarea.value;
                 statusEl.textContent = 'Đang lưu...';
                 statusEl.style.color = 'var(--accent-color)';
                 debouncedSave(localContent);
             });
-
             const docRef = doc(db, "users", currentUser.uid, collectionName, moduleId);
             const unsub = onSnapshot(docRef, (doc) => {
                 const data = doc.data();
@@ -496,7 +492,6 @@
             const historyListEl = document.getElementById('session-history-list');
             if (!historyListEl) return;
             const archivesCollectionRef = collection(db, 'users', currentUser.uid, 'archives');
-
             const unsub = onSnapshot(query(archivesCollectionRef, orderBy('timestamp', 'desc')), (snapshot) => {
                 historyListEl.innerHTML = '';
                 if (snapshot.empty) {
@@ -508,16 +503,7 @@
                     const itemEl = document.createElement('div');
                     itemEl.className = 'history-item';
                     const date = data.timestamp?.toDate().toLocaleString('vi-VN') || 'Không rõ ngày';
-                    
-                    itemEl.innerHTML = `
-                        <div class="history-item-info">
-                            <span class="history-item-title">${data.title || 'Phiên chưa đặt tên'}</span>
-                            <span class="history-item-date">${date}</span>
-                        </div>
-                        <div class="history-item-actions">
-                            <button class="btn-subtle btn-danger delete-history-btn" data-id="${docSnap.id}" title="Xóa vĩnh viễn phiên này"><i class="fa-solid fa-trash-can"></i></button>
-                        </div>`;
-                    
+                    itemEl.innerHTML = `<div class="history-item-info"><span class="history-item-title">${data.title || 'Phiên chưa đặt tên'}</span><span class="history-item-date">${date}</span></div><div class="history-item-actions"><button class="btn-subtle btn-danger delete-history-btn" data-id="${docSnap.id}" title="Xóa vĩnh viễn phiên này"><i class="fa-solid fa-trash-can"></i></button></div>`;
                     itemEl.addEventListener('click', async (e) => {
                          if (e.target.closest('.delete-history-btn')) return;
                          const archiveId = docSnap.id;
@@ -526,7 +512,6 @@
                            await loadArchivedSession(moduleToLoad, archiveId);
                         }
                     });
-                    
                     itemEl.querySelector('.delete-history-btn').addEventListener('click', async (e) => {
                         e.stopPropagation();
                         if (confirm(`Bạn có chắc muốn XÓA vĩnh viễn phiên "${data.title}" không? Hành động này không thể hoàn tác.`)) {
@@ -535,19 +520,16 @@
                             await deleteDoc(archiveDocRef);
                         }
                     });
-
                     historyListEl.appendChild(itemEl);
                 });
             });
             unsubscribeListeners.push(unsub);
         }
 
-        // NEW FEATURE: Setup for Bookmarked Prompts
         function setupBookmarkedPrompts() {
             const listEl = document.getElementById('bookmarked-prompts-list');
             if (!listEl) return;
             const collectionRef = collection(db, 'users', currentUser.uid, 'bookmarked_prompts');
-
             const unsub = onSnapshot(query(collectionRef, orderBy('savedAt', 'desc')), (snapshot) => {
                 listEl.innerHTML = '';
                 if (snapshot.empty) {
@@ -558,16 +540,7 @@
                     const data = docSnap.data();
                     const itemEl = document.createElement('div');
                     itemEl.className = 'bookmark-item';
-
-                    itemEl.innerHTML = `
-                        <div class="bookmark-item-info">
-                            <span class="bookmark-item-text">${data.promptText}</span>
-                        </div>
-                        <div class="bookmark-item-actions">
-                            <button class="btn-subtle btn-danger delete-bookmark-btn" title="Xóa gợi ý này"><i class="fa-solid fa-trash-can"></i></button>
-                        </div>`;
-                    
-                    // Click to use the prompt
+                    itemEl.innerHTML = `<div class="bookmark-item-info"><span class="bookmark-item-text">${data.promptText}</span></div><div class="bookmark-item-actions"><button class="btn-subtle btn-danger delete-bookmark-btn" title="Xóa gợi ý này"><i class="fa-solid fa-trash-can"></i></button></div>`;
                     itemEl.addEventListener('click', (e) => {
                         if (e.target.closest('.delete-bookmark-btn')) return;
                         const chatInput = document.getElementById('case-trainer-chat-input');
@@ -576,14 +549,11 @@
                             chatInput.focus();
                         }
                     });
-
-                    // Click to delete the prompt
                     itemEl.querySelector('.delete-bookmark-btn').addEventListener('click', async (e) => {
                         e.stopPropagation();
                         const docRef = doc(db, 'users', currentUser.uid, 'bookmarked_prompts', docSnap.id);
                         await deleteDoc(docRef);
                     });
-                    
                     listEl.appendChild(itemEl);
                 });
             });
@@ -594,20 +564,11 @@
             if (!currentUser) return false;
             const activeSessionRef = doc(db, 'users', currentUser.uid, 'chats', moduleId);
             const activeSessionDoc = await getDoc(activeSessionRef);
-
             if (activeSessionDoc.exists() && activeSessionDoc.data().history?.length > 1) {
                 const dataToArchive = activeSessionDoc.data();
                 if (dataToArchive.activeArchiveId) return false; 
-
                 let title = dataToArchive.fileName ? `Phân tích: ${dataToArchive.fileName}` : `Phiên lúc ${new Date().toLocaleString('vi-VN')}`;
-                
-                const archiveData = {
-                    ...dataToArchive,
-                    title: title,
-                    timestamp: serverTimestamp(),
-                    module: moduleId 
-                };
-                
+                const archiveData = { ...dataToArchive, title: title, timestamp: serverTimestamp(), module: moduleId };
                 await addDoc(collection(db, 'users', currentUser.uid, 'archives'), archiveData);
                 return true;
             }
@@ -616,26 +577,15 @@
 
         async function loadArchivedSession(moduleId, archiveId) {
             if (!currentUser || !archiveId) return;
-            
             await archiveCurrentSession(moduleId);
-            
             const archiveDocRef = doc(db, 'users', currentUser.uid, 'archives', archiveId);
             const archiveDoc = await getDoc(archiveDocRef);
-
             if (archiveDoc.exists()) {
                 const archivedData = archiveDoc.data();
-                
-                const dataToLoad = {
-                    history: archivedData.history || [], 
-                    fileName: archivedData.fileName || '',
-                    activeArchiveId: archiveId
-                };
-
+                const dataToLoad = { history: archivedData.history || [], fileName: archivedData.fileName || '', activeArchiveId: archiveId };
                 await setDoc(doc(db, "users", currentUser.uid, "chats", moduleId), dataToLoad);
-                
                 showModule(`#${moduleId}`);
                 alert('Đã tải lại phiên làm việc. Giao diện sẽ được làm mới.');
-
             } else {
                 console.error("Could not find archive document with ID:", archiveId);
                 alert("Lỗi: Không thể tìm thấy phiên lưu trữ.");
@@ -643,11 +593,99 @@
         }
         
         function setupLearningRoom() {
-            // Unchanged
+            const moduleId = 'learning-room';
+            const historyEl = document.getElementById(`${moduleId}-chat-history`);
+            const form = document.getElementById(`${moduleId}-chat-form`);
+            const input = document.getElementById(`${moduleId}-chat-input`);
+            const clearBtn = document.getElementById(`clear-${moduleId}-history`);
+            if(!historyEl || !form || !input || !clearBtn) return;
+            
+            let history = [];
+            let chatSession = null;
+            let isThinking = false;
+            const systemInstruction = {
+                role: "system",
+                parts: [{ text: "You are a helpful assistant for Business Analytics students. All your responses must be in Vietnamese."}]
+            };
+
+            const unsub = onSnapshot(doc(db, "users", currentUser.uid, "chats", moduleId), (doc) => {
+                isThinking = false;
+                historyEl.innerHTML = '';
+                const data = doc.data();
+                history = getValidHistoryForChat((data && data.history) ? data.history : []);
+                
+                chatSession = geminiModel.startChat({ history, systemInstruction });
+
+                if (history.length > 0) {
+                    history.forEach(msg => {
+                        const sender = msg.role === 'user' ? 'user' : 'ai';
+                        const messageDiv = document.createElement('div');
+                        messageDiv.className = `chat-message ${sender}-message`;
+                        messageDiv.innerHTML = window.marked.parse(msg.parts[0].text);
+                        historyEl.appendChild(messageDiv);
+                    });
+                } else {
+                     const aiMsgContainer = document.createElement('div');
+                     aiMsgContainer.className = 'chat-message ai-message';
+                     aiMsgContainer.innerHTML = window.marked.parse("Xin chào! Tôi là trợ lý học tập BA của bạn. Bạn muốn hỏi về chủ đề gì hôm nay?");
+                     historyEl.appendChild(aiMsgContainer);
+                }
+                 historyEl.scrollTop = historyEl.scrollHeight;
+            });
+            unsubscribeListeners.push(unsub);
+            
+            form.addEventListener('submit', async e => {
+                e.preventDefault();
+                const userQuery = input.value.trim();
+                if (!userQuery || !geminiModel || isThinking) return;
+                
+                isThinking = true;
+                const submitButton = form.querySelector('button');
+                const originalButtonHTML = submitButton.innerHTML;
+                
+                const tempUserMsg = document.createElement('div');
+                tempUserMsg.className = 'chat-message user-message';
+                tempUserMsg.innerHTML = window.marked.parse(userQuery);
+                historyEl.appendChild(tempUserMsg);
+                
+                const tempAiThinking = document.createElement('div');
+                tempAiThinking.className = 'chat-message ai-message';
+                tempAiThinking.innerHTML = `<div class="small-spinner"></div>`;
+                historyEl.appendChild(tempAiThinking);
+                historyEl.scrollTop = historyEl.scrollHeight;
+                
+                input.value = '';
+                submitButton.disabled = true;
+                submitButton.innerHTML = `<div class="small-spinner"></div>`;
+
+                const historyWithUserMsg = [...history, { role: 'user', parts: [{ text: userQuery }] }];
+
+                try {
+                    const result = await chatSession.sendMessage(userQuery);
+                    const fullResponse = await result.response.text();
+                    
+                    const finalHistory = [...historyWithUserMsg, { role: 'model', parts: [{ text: fullResponse }] }];
+                    await saveData("chats", moduleId, { history: finalHistory });
+                } catch (error) {
+                    console.error("Error sending message:", error);
+                    const errorHistory = [...historyWithUserMsg, { role: 'model', parts: [{ text: "Lỗi: Không thể nhận phản hồi từ AI." }] }];
+                    await saveData("chats", moduleId, { history: errorHistory });
+                } finally {
+                    isThinking = false;
+                    submitButton.disabled = false;
+                    submitButton.innerHTML = originalButtonHTML;
+                }
+            });
+
+            clearBtn.addEventListener('click', () => {
+                if (confirm("Bạn có chắc muốn xóa cuộc trò chuyện này không?")) {
+                    saveData("chats", moduleId, { history: [] });
+                }
+            });
         }
         
         function setupMockInterview() {
-            // Unchanged
+            // This logic can be filled in similarly to the other modules
         }
         
         // =====================================================================
@@ -685,13 +723,21 @@
                     bookmarkedPrompts.add(text);
                     bookmarkedDocs.set(text, doc.id);
                 });
+                document.querySelectorAll('.bookmark-btn[data-prompt]').forEach(btn => {
+                    const prompt = btn.dataset.prompt;
+                    const isBookmarked = bookmarkedPrompts.has(prompt);
+                    const icon = btn.querySelector('i');
+                    icon.classList.toggle('fa-solid', isBookmarked);
+                    icon.classList.toggle('fa-regular', !isBookmarked);
+                    btn.classList.toggle('bookmarked', isBookmarked);
+                    btn.title = isBookmarked ? "Bỏ lưu gợi ý" : "Lưu lại gợi ý này";
+                });
             });
             unsubscribeListeners.push(unsubBookmarks);
 
             async function toggleBookmark(promptText) {
                 if (!promptText) return;
                 const isBookmarked = bookmarkedPrompts.has(promptText);
-
                 if (isBookmarked) {
                     const docId = bookmarkedDocs.get(promptText);
                     if (docId) {
@@ -706,13 +752,7 @@
                 }
             }
 
-            langGroup.addEventListener('click', (e) => {
-                if (e.target.classList.contains('language-btn')) {
-                    langGroup.querySelector('.selected')?.classList.remove('selected');
-                    e.target.classList.add('selected');
-                    selectedLanguage = e.target.dataset.lang;
-                }
-            });
+            langGroup.addEventListener('click', (e) => { if(e.target.classList.contains('language-btn')){langGroup.querySelector('.selected')?.classList.remove('selected'); e.target.classList.add('selected'); selectedLanguage = e.target.dataset.lang;} });
             
             function showAnalysisError(message) {
                 const mainInsightContainer = document.querySelector('#analysis-hub .main-insight-card-container');
@@ -726,41 +766,30 @@
                 if (!contentArea) return null;
                 const card = document.createElement('div');
                 card.className = 'content-card';
-                
                 const header = document.createElement('div');
                 header.className = 'content-card-header';
-                
                 const titleEl = document.createElement('h4');
                 titleEl.textContent = title;
-
                 header.appendChild(titleEl);
 
                 if (textToBookmark) {
                     const bookmarkBtn = document.createElement('button');
                     bookmarkBtn.className = 'bookmark-btn';
+                    bookmarkBtn.dataset.prompt = textToBookmark;
                     const isBookmarked = bookmarkedPrompts.has(textToBookmark);
                     bookmarkBtn.innerHTML = `<i class="fa-${isBookmarked ? 'solid' : 'regular'} fa-star"></i>`;
                     if (isBookmarked) bookmarkBtn.classList.add('bookmarked');
                     bookmarkBtn.title = isBookmarked ? "Bỏ lưu gợi ý" : "Lưu lại gợi ý này";
-                    bookmarkBtn.onclick = () => {
+                    bookmarkBtn.onclick = (e) => {
+                        e.stopPropagation();
                         toggleBookmark(textToBookmark);
-                        const icon = bookmarkBtn.querySelector('i');
-                        const currentlyBookmarked = icon.classList.contains('fa-solid');
-                        icon.classList.toggle('fa-solid', !currentlyBookmarked);
-                        icon.classList.toggle('fa-regular', currentlyBookmarked);
-                        bookmarkBtn.classList.toggle('bookmarked', !currentlyBookmarked);
                     };
                     header.appendChild(bookmarkBtn);
                 }
-
                 card.appendChild(header);
-                
                 const contentEl = document.createElement('div');
-                if (isHTML) {
-                    contentEl.innerHTML = content;
-                } else {
-                    contentEl.textContent = content;
-                }
+                if (isHTML) contentEl.innerHTML = content;
+                else contentEl.textContent = content;
                 card.appendChild(contentEl);
                 contentArea.appendChild(card);
                 card.scrollIntoView({ behavior: 'smooth', block: 'end' });
@@ -769,15 +798,30 @@
 
             function renderChart(canvasElement, chartData) {
                 if (!canvasElement) return;
-                if (chartData.type === 'horizontalBar') {
-                    chartData.type = 'bar';
-                    if (!chartData.options) chartData.options = {};
-                    chartData.options.indexAxis = 'y';
+
+                // Defensive copy to avoid modifying the original object
+                const chartConfig = JSON.parse(JSON.stringify(chartData));
+
+                if (chartConfig.type === 'horizontalBar') {
+                    chartConfig.type = 'bar';
+                    if (!chartConfig.options) chartConfig.options = {};
+                    chartConfig.options.indexAxis = 'y';
                 }
+
+                // Safely add formatter function if y-axis exists
+                if (chartConfig.options?.scales?.y) {
+                    chartConfig.options.scales.y.ticks = {
+                        ...chartConfig.options.scales.y.ticks,
+                        callback: function(value) {
+                            return value.toLocaleString('vi-VN');
+                        }
+                    };
+                }
+
                 const ctx = canvasElement.getContext('2d');
                 const existingChart = Chart.getChart(ctx);
                 if (existingChart) existingChart.destroy();
-                new Chart(ctx, chartData);
+                new Chart(ctx, chartConfig);
             }
 
             function processFollowUpResponse(container, responseText) {
@@ -787,7 +831,6 @@
                 if (chartMatch && chartMatch[1]) {
                     try {
                         const chartJsonString = chartMatch[1];
-                        // FIX: Revert to standard JSON.parse. The issue was likely malformed JSON from the AI.
                         const chartData = JSON.parse(chartJsonString);
                         const canvas = document.createElement('canvas');
                         container.appendChild(canvas);
@@ -822,105 +865,94 @@
             }
             
             function populateAnalysisHub(responseObj) {
-                const mainInsightContainer = document.querySelector('#analysis-hub .main-insight-card-container');
-                 if (mainInsightContainer) {
-                    mainInsightContainer.innerHTML = `<div class="main-insight-card"><i class="fa-solid fa-star"></i><p id="analysis-hub-main-insight-text"></p></div>`;
-                    const mainInsightEl = document.getElementById('analysis-hub-main-insight-text');
-                    if(mainInsightEl && responseObj.mainInsight) mainInsightEl.textContent = responseObj.mainInsight;
-                }
-
-                const metricsGrid = document.getElementById('analysis-hub-key-metrics-grid');
-                if (metricsGrid && responseObj.keyMetrics) {
-                    metricsGrid.innerHTML = '';
-                    responseObj.keyMetrics.forEach(metric => {
-                        const card = document.createElement('div');
-                        card.className = 'metric-card';
-                        card.innerHTML = `<span class="metric-card-label">${metric.label}</span><span class="metric-card-value">${metric.value}</span>`;
-                        metricsGrid.appendChild(card);
-                    });
-                }
-                
-                const suggestionsGroup = document.getElementById('hub-suggestions-group');
-                if (suggestionsGroup && responseObj.curatedSuggestions) {
-                    suggestionsGroup.innerHTML = '';
-                    responseObj.curatedSuggestions.forEach(sugg => {
-                        const wrapper = document.createElement('div');
-                        wrapper.className = 'suggestion-button';
-
-                        const button = document.createElement('button');
-                        let icon = '❓';
-                        if (sugg.type === 'chart') icon = '📈';
-                        else if (sugg.type === 'deep-dive') icon = '🔬';
-                        button.innerHTML = `<span>${icon}</span> ${sugg.text}`;
-                        button.onclick = (e) => {
-                             if (isThinking) return;
-                             form.dispatchEvent(new CustomEvent('submit', { detail: { query: sugg.text, sourceButton: e.currentTarget } }));
-                        };
-                        wrapper.appendChild(button);
-
-                        const bookmarkBtn = document.createElement('button');
-                        bookmarkBtn.className = 'bookmark-btn btn-subtle';
-                        const isBookmarked = bookmarkedPrompts.has(sugg.text);
-                        bookmarkBtn.innerHTML = `<i class="fa-${isBookmarked ? 'solid' : 'regular'} fa-star"></i>`;
-                        if (isBookmarked) bookmarkBtn.classList.add('bookmarked');
-                        bookmarkBtn.title = isBookmarked ? "Bỏ lưu gợi ý" : "Lưu lại gợi ý này";
-                        bookmarkBtn.onclick = () => {
-                            toggleBookmark(sugg.text);
-                        };
-                        wrapper.appendChild(bookmarkBtn);
-
-                        suggestionsGroup.appendChild(wrapper);
-                    });
+                try {
+                    const mainInsightContainer = document.querySelector('#analysis-hub .main-insight-card-container');
+                    if (mainInsightContainer) {
+                        mainInsightContainer.innerHTML = `<div class="main-insight-card"><i class="fa-solid fa-star"></i><p id="analysis-hub-main-insight-text"></p></div>`;
+                        const mainInsightEl = document.getElementById('analysis-hub-main-insight-text');
+                        if(mainInsightEl && responseObj.mainInsight) mainInsightEl.textContent = responseObj.mainInsight;
+                    }
+                    const metricsGrid = document.getElementById('analysis-hub-key-metrics-grid');
+                    if (metricsGrid && responseObj.keyMetrics) {
+                        metricsGrid.innerHTML = '';
+                        responseObj.keyMetrics.forEach(metric => {
+                            const card = document.createElement('div');
+                            card.className = 'metric-card';
+                            card.innerHTML = `<span class="metric-card-label">${metric.label}</span><span class="metric-card-value">${metric.value}</span>`;
+                            metricsGrid.appendChild(card);
+                        });
+                    }
+                    const suggestionsGroup = document.getElementById('hub-suggestions-group');
+                    if (suggestionsGroup && responseObj.curatedSuggestions) {
+                        suggestionsGroup.innerHTML = '';
+                        responseObj.curatedSuggestions.forEach(sugg => {
+                            const wrapper = document.createElement('div');
+                            wrapper.className = 'suggestion-button';
+                            const button = document.createElement('button');
+                            let icon = '❓';
+                            if (sugg.type === 'chart') icon = '📈';
+                            else if (sugg.type === 'deep-dive') icon = '🔬';
+                            button.innerHTML = `<span>${icon}</span> ${sugg.text}`;
+                            button.onclick = (e) => { if (isThinking) return; form.dispatchEvent(new CustomEvent('submit', { detail: { query: sugg.text, sourceButton: e.currentTarget } })); };
+                            wrapper.appendChild(button);
+                            const bookmarkBtn = document.createElement('button');
+                            bookmarkBtn.className = 'bookmark-btn btn-subtle';
+                            bookmarkBtn.dataset.prompt = sugg.text;
+                            const isBookmarked = bookmarkedPrompts.has(sugg.text);
+                            bookmarkBtn.innerHTML = `<i class="fa-${isBookmarked ? 'solid' : 'regular'} fa-star"></i>`;
+                            if (isBookmarked) bookmarkBtn.classList.add('bookmarked');
+                            bookmarkBtn.title = isBookmarked ? "Bỏ lưu gợi ý" : "Lưu lại gợi ý này";
+                            bookmarkBtn.onclick = () => toggleBookmark(sugg.text);
+                            wrapper.appendChild(bookmarkBtn);
+                            suggestionsGroup.appendChild(wrapper);
+                        });
+                    }
+                } catch(e) {
+                     console.error("Error populating analysis hub:", e);
+                     showAnalysisError("AI trả về dữ liệu không hợp lệ để hiển thị.");
                 }
             }
             
             const unsub = onSnapshot(doc(db, "users", currentUser.uid, "chats", moduleId), (docSnapshot) => {
                 if (contentArea) contentArea.innerHTML = '';
                 isThinking = false;
-                
                 const data = docSnapshot.data();
                 const sessionExists = data && data.history && data.history.length > 0;
-                
                 currentArchiveId = (data && data.activeArchiveId) ? data.activeArchiveId : null;
-                
                 history = getValidHistoryForChat(sessionExists ? data.history : []);
-                
-                if (geminiModel) {
-                     chatSession = geminiModel.startChat({ history });
-                }
+                if (geminiModel) chatSession = geminiModel.startChat({ history });
 
                 if (sessionExists) {
-                    const initialAnalysisMsg = history.find(msg => msg.role === 'model' && msg.parts[0].text.includes('"mainInsight"'));
-                    if (initialAnalysisMsg) {
-                        try {
+                    try {
+                        const initialAnalysisMsg = history.find(msg => msg.role === 'model' && msg.parts[0].text.includes('"mainInsight"'));
+                        if (initialAnalysisMsg) {
                             const jsonString = extractJson(initialAnalysisMsg.parts[0].text);
                             const responseObj = JSON.parse(jsonString);
                             populateAnalysisHub(responseObj);
-                        } catch (e) {
-                            showAnalysisError("Lỗi khi xử lý phân tích đã lưu.");
                         }
-                    }
-                    
-                    history.forEach((msg, index) => {
-                        if (msg.role === 'user' && msg.parts[0].text.includes('You are an expert Business Analyst assistant')) return;
-                        if (msg.role === 'model' && msg.parts[0].text.includes('"mainInsight"')) return;
-                        if (msg.role === 'user') {
-                             addContentCard(`Câu hỏi của bạn:`, false, msg.parts[0].text, msg.parts[0].text);
-                        } else if (msg.role === 'model') {
-                             let userQuestionMsg = "Phản hồi của AI";
-                             let textToBookmark = '';
-                             for(let i = index - 1; i >= 0; i--) {
-                                if(history[i].role === 'user' && !history[i].parts[0].text.includes('You are an expert Business Analyst assistant')) {
-                                    userQuestionMsg = history[i].parts[0].text;
-                                    textToBookmark = history[i].parts[0].text;
-                                    break;
+                        history.forEach((msg, index) => {
+                            if (msg.role === 'user' && msg.parts[0].text.includes('You are an expert Business Analyst assistant')) return;
+                            if (msg.role === 'model' && msg.parts[0].text.includes('"mainInsight"')) return;
+                            if (msg.role === 'user') {
+                                addContentCard(`Câu hỏi của bạn:`, false, msg.parts[0].text, msg.parts[0].text);
+                            } else if (msg.role === 'model') {
+                                let userQuestionMsg = "Phản hồi của AI";
+                                let textToBookmark = '';
+                                for(let i = index - 1; i >= 0; i--) {
+                                    if(history[i].role === 'user' && !history[i].parts[0].text.includes('You are an expert Business Analyst assistant')) {
+                                        userQuestionMsg = history[i].parts[0].text;
+                                        textToBookmark = history[i].parts[0].text;
+                                        break;
+                                    }
                                 }
-                             }
-                             const { contentEl } = addContentCard(userQuestionMsg, true, '', textToBookmark);
-                             if (contentEl) processFollowUpResponse(contentEl, msg.parts[0].text);
-                        }
-                    });
-
+                                const { contentEl } = addContentCard(userQuestionMsg, true, '', textToBookmark);
+                                if (contentEl) processFollowUpResponse(contentEl, msg.parts[0].text);
+                            }
+                        });
+                    } catch (e) {
+                        console.error("Error processing history:", e);
+                        showAnalysisError("Lỗi khi tải lại phiên làm việc. Dữ liệu có thể bị hỏng.");
+                    }
                     uploadSection.style.display = 'none';
                     analysisHub.style.display = 'block';
                 } else {
@@ -941,9 +973,7 @@
                 await archiveCurrentSession(moduleId);
                 const file = fileInput.files[0];
                 if (!file) return;
-                
                 await saveData("chats", moduleId, { history: [], fileName: file.name, activeArchiveId: null });
-                
                 uploadSection.style.display = 'none';
                 analysisHub.style.display = 'block';
                 const mainInsightContainer = document.querySelector('#analysis-hub .main-insight-card-container');
@@ -953,7 +983,6 @@
                     document.getElementById('hub-suggestions-group').innerHTML = '';
                     if(contentArea) contentArea.innerHTML = '';
                 }
-
                 const reader = new FileReader();
                 reader.onload = async (e) => {
                     let dataContext = '';
@@ -974,35 +1003,14 @@
                         await saveData("chats", moduleId, { history:[], fileName:'', activeArchiveId: null }); 
                         return; 
                     }
-                    
-                    const initialPrompt = `You are an expert Business Analyst assistant. Your response language MUST be ${selectedLanguage}. The user has uploaded the following data:
-                    ---DATA---
-                    ${dataContext.substring(0, 100000)}
-                    ---END DATA---
-                    Your entire response MUST be a single, strictly valid, data-only JSON object, with no surrounding text, markdown, or explanations.
-                    The JSON object must have the following keys:
-                    - "mainInsight": (String) A single, most important or surprising insight from the data.
-                    - "keyMetrics": (Array of {label: String, value: String}) 2-3 of the most important high-level metrics from the data.
-                    - "curatedSuggestions": (Array of {type: String, text: String}) 3-4 of the best and most relevant follow-up questions. The type must be one of 'chart', 'deep-dive', or 'question'.
-                    **Follow-up Response Rules (Very Important):**
-                    - If a follow-up asks for a chart, respond ONLY with a strictly valid Chart.js (v3+) JSON object inside <chart> tags. Example: <chart>{ "type": "bar", ... }</chart>
-                    - If a follow-up asks for a deep-dive, respond ONLY with a strictly valid JSON object: { "title": "...", "sections": [ { "heading": "...", "content": "..." } ] }.
-                    - Otherwise, provide a concise answer in Markdown.
-                    Now, generate the initial analysis hub JSON response in ${selectedLanguage}.`;
-
+                    const initialPrompt = `You are an expert Business Analyst assistant. Your response language MUST be ${selectedLanguage}. The user has uploaded the following data:\n---DATA---\n${dataContext.substring(0, 100000)}\n---END DATA---\nYour entire response MUST be a single, strictly valid, data-only JSON object, with no surrounding text, markdown, or explanations. CRITICALLY, this JSON must be 100% serializable and MUST NOT contain any JavaScript functions, comments, or any other non-standard JSON syntax. The JSON object must have the following keys: "mainInsight" (String), "keyMetrics" (Array of {label: String, value: String}), "curatedSuggestions" (Array of {type: String, text: String}). **Follow-up Response Rules (Very Important):** If a follow-up asks for a chart, respond ONLY with a strictly valid, 100% serializable Chart.js (v3+) JSON object inside <chart> tags. DO NOT include functions, comments, or any non-standard syntax. Example: <chart>{ "type": "bar", ... }</chart>. If a follow-up asks for a deep-dive, respond ONLY with a strictly valid JSON object: { "title": "...", "sections": [ { "heading": "...", "content": "..." } ] }. Otherwise, provide a concise answer in Markdown. Now, generate the initial analysis hub JSON response in ${selectedLanguage}.`;
                     chatSession = geminiModel.startChat();
                     try {
                         const result = await chatSession.sendMessage(initialPrompt);
                         const responseText = await result.response.text();
                         const cleanedJsonString = extractJson(responseText);
                         JSON.parse(cleanedJsonString);
-                        await saveData("chats", moduleId, { 
-                            history: [
-                                { role: 'user', parts: [{ text: initialPrompt }] },
-                                { role: 'model', parts: [{ text: cleanedJsonString }] }
-                            ], 
-                            fileName: file.name 
-                        });
+                        await saveData("chats", moduleId, { history: [{ role: 'user', parts: [{ text: initialPrompt }] }, { role: 'model', parts: [{ text: cleanedJsonString }] }], fileName: file.name });
                     } catch (err) { 
                         console.error("Error initial analysis:", err, "Response received:", err.response ? await err.response.text() : "No response text"); 
                         showAnalysisError("AI trả về phản hồi không hợp lệ. Vui lòng thử lại."); 
@@ -1016,16 +1024,13 @@
                 e.preventDefault();
                 const userQuery = e.detail?.query || inputEl.value.trim();
                 if (!userQuery || !chatSession || isThinking) return;
-                
                 isThinking = true;
                 const submitButton = form.querySelector('button');
                 const suggestionsGroup = document.getElementById('hub-suggestions-group');
                 submitButton.disabled = true;
                 suggestionsGroup.querySelectorAll('button').forEach(btn => btn.disabled = true);
-
                 const historyWithUserMsg = [...history, { role: 'user', parts: [{ text: userQuery }] }];
                 await saveData("chats", moduleId, { history: historyWithUserMsg });
-                 
                 try {
                     const result = await chatSession.sendMessage([{ text: userQuery }]);
                     const fullResponseText = await result.response.text();
@@ -1042,7 +1047,6 @@
                 const isUpdating = currentArchiveId !== null;
                 let message = "Bạn có muốn LƯU TRỮ phiên làm việc này và bắt đầu một phiên mới không?";
                 let sessionTitle = "phiên hiện tại";
-
                 if (isUpdating) {
                     const archiveDocRef = doc(db, 'users', currentUser.uid, 'archives', currentArchiveId);
                     try {
@@ -1051,13 +1055,10 @@
                     } catch (e) { console.error("Could not fetch title", e); }
                     message = `Bạn có muốn CẬP NHẬT những thay đổi vào ${sessionTitle} và bắt đầu lại không?`;
                 }
-
                 if (!confirm(message)) return;
-
                 const activeSessionRef = doc(db, 'users', currentUser.uid, 'chats', moduleId);
                 const activeSessionDoc = await getDoc(activeSessionRef);
                 const hasContentToSave = activeSessionDoc.exists() && activeSessionDoc.data().history?.length > 1;
-
                 if (hasContentToSave) {
                     const dataToSave = activeSessionDoc.data();
                     if (isUpdating) {
@@ -1074,7 +1075,6 @@
                 } else {
                     alert(isUpdating ? `Không có thay đổi để cập nhật cho ${sessionTitle}.` : "Không có nội dung để lưu trữ. Bắt đầu phiên mới.");
                 }
-
                 await saveData("chats", moduleId, { history: [], fileName: '', activeArchiveId: null });
                 fileInput.value = '';
                 if(fileUploadText) fileUploadText.textContent = 'Nhấp để chọn file CSV, Excel, PDF hoặc DOCX';
