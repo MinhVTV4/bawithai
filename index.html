@@ -447,8 +447,8 @@
                     historyListEl.innerHTML = '<p style="padding: 12px 8px; font-size: 0.85rem; color: #64748b;">Chưa có phiên nào được lưu trữ.</p>';
                     return;
                 }
-                snapshot.forEach(doc => {
-                    const data = doc.data();
+                snapshot.forEach(docSnap => {
+                    const data = docSnap.data();
                     const itemEl = document.createElement('div');
                     itemEl.className = 'history-item';
                     const date = data.timestamp?.toDate().toLocaleString('vi-VN') || 'Không rõ ngày';
@@ -458,21 +458,15 @@
                             <span class="history-item-date">${date}</span>
                         </div>
                         <div class="history-item-actions">
-                            <button class="btn-subtle load-history-btn" data-id="${doc.id}" title="Tải lại phiên này"><i class="fa-solid fa-upload"></i></button>
-                            <button class="btn-subtle btn-danger delete-history-btn" data-id="${doc.id}" title="Xóa phiên này"><i class="fa-solid fa-trash-can"></i></button>
+                            <button class="btn-subtle load-history-btn" data-id="${docSnap.id}" title="Tải lại phiên này"><i class="fa-solid fa-upload"></i></button>
+                            <button class="btn-subtle btn-danger delete-history-btn" data-id="${docSnap.id}" title="Xóa phiên này"><i class="fa-solid fa-trash-can"></i></button>
                         </div>`;
                     
                     itemEl.querySelector('.load-history-btn').addEventListener('click', async (e) => {
                         e.stopPropagation();
                         if (confirm(`Bạn có muốn tải lại phiên "${data.title}" không? Phiên làm việc hiện tại sẽ được lưu trữ.`)) {
-                            const archiveId = e.currentTarget.dataset.id;
-                            const archiveDocRef = doc(db, 'users', currentUser.uid, 'archives', archiveId);
-                            const archiveDoc = await getDoc(archiveDocRef);
-                            if (archiveDoc.exists()) {
-                                const archivedData = archiveDoc.data();
-                                await archiveCurrentSession('case-trainer');
-                                await saveData('chats', 'case-trainer', { history: archivedData.history, fileName: archivedData.fileName || '' });
-                            }
+                           const archiveId = e.currentTarget.dataset.id;
+                           await loadArchivedSession('case-trainer', archiveId);
                         }
                     });
                     
@@ -507,6 +501,28 @@
                 };
                 
                 await addDoc(collection(db, 'users', currentUser.uid, 'archives'), archiveData);
+            }
+        }
+
+        async function loadArchivedSession(moduleId, archiveId) {
+            if (!currentUser || !archiveId) return;
+            
+            // 1. Archive the current session first
+            await archiveCurrentSession(moduleId);
+            
+            // 2. Fetch the archived session data
+            const archiveDocRef = doc(db, 'users', currentUser.uid, 'archives', archiveId);
+            const archiveDoc = await getDoc(archiveDocRef);
+
+            if (archiveDoc.exists()) {
+                const archivedData = archiveDoc.data();
+                // 3. Overwrite the active session with the loaded data
+                await saveData('chats', moduleId, { 
+                    history: archivedData.history || [], 
+                    fileName: archivedData.fileName || '' 
+                });
+            } else {
+                console.error("Could not find archive document with ID:", archiveId);
             }
         }
         
@@ -962,10 +978,11 @@
             
             analyzeBtn?.addEventListener('click', async () => {
                 await archiveCurrentSession(moduleId);
-                await saveData("chats", moduleId, { history: [], fileName: '' });
-
+                
                 const file = fileInput.files[0];
-                if (!file || !geminiModel) return;
+                if (!file) return;
+                
+                await saveData("chats", moduleId, { history: [], fileName: file.name });
                 
                 uploadSection.style.display = 'none';
                 analysisHub.style.display = 'block';
@@ -1092,11 +1109,13 @@
             });
 
              clearBtn.addEventListener('click', async () => {
-                await archiveCurrentSession(moduleId);
-                await saveData("chats", moduleId, { history: [], fileName: '' });
-                fileInput.value = '';
-                if(fileUploadText) fileUploadText.textContent = 'Nhấp để chọn file CSV, Excel, PDF hoặc DOCX';
-                if(analyzeBtn) analyzeBtn.disabled = true;
+                if (confirm("Bạn có chắc muốn lưu trữ phiên này và bắt đầu lại không?")) {
+                    await archiveCurrentSession(moduleId);
+                    await saveData("chats", moduleId, { history: [], fileName: '' });
+                    fileInput.value = '';
+                    if(fileUploadText) fileUploadText.textContent = 'Nhấp để chọn file CSV, Excel, PDF hoặc DOCX';
+                    if(analyzeBtn) analyzeBtn.disabled = true;
+                }
             });
         }
         
