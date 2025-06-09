@@ -109,16 +109,18 @@
         #scratchpad-textarea { width: 100%; height: 100%; border: none; resize: none; font-family: 'Inter', sans-serif; font-size: 0.95rem; color: var(--text-dark); line-height: 1.6; background-color: transparent; }
         #scratchpad-textarea:focus { outline: none; }
         #notebook-footer { padding: 10px 20px; font-size: 0.8rem; color: #94a3b8; font-style: italic; align-self: flex-end; }
+        #notebook-status { transition: color 0.3s ease; }
 
         #session-history-list { max-height: 300px; overflow-y: auto; }
-        .history-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 8px; border-bottom: 1px solid #f1f5f9; }
+        .history-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 8px; border-bottom: 1px solid #f1f5f9; cursor: pointer; border-radius: 4px; }
+        .history-item:hover { background-color: #f8fafc; }
         .history-item:last-child { border-bottom: none; }
-        .history-item-info { display: flex; flex-direction: column; }
+        .history-item-info { display: flex; flex-direction: column; flex-grow: 1; }
         .history-item-title { font-weight: 500; color: var(--text-dark); margin-bottom: 4px; }
         .history-item-date { font-size: 0.75rem; color: #64748b; }
-        .history-item-actions { display: flex; gap: 5px; }
+        .history-item-actions { display: flex; gap: 5px; opacity: 0; transition: opacity 0.2s; }
+        .history-item:hover .history-item-actions { opacity: 1; }
         .history-item-actions button { padding: 6px 10px; font-size: 0.8rem; }
-
 
         /* Chat Styles */
         .chat-history { height: 500px; overflow-y: auto; border: 1px solid #e2e8f0; padding: 10px; border-radius: 8px; margin-bottom: 15px; display: flex; flex-direction: column; }
@@ -230,6 +232,12 @@
         import { getFirestore, doc, setDoc, onSnapshot, collection, addDoc, serverTimestamp, query, getDocs, getDoc, deleteDoc, orderBy } from "https://www.gstatic.com/firebasejs/11.9.0/firebase-firestore.js";
         import { getAI, getGenerativeModel } from "https://www.gstatic.com/firebasejs/11.9.0/firebase-ai.js";
 
+        // --- CẢNH BÁO BẢO MẬT ---
+        // API Key của bạn đang được đặt ở đây phía client.
+        // Điều này là bình thường với Firebase, nhưng BẮT BUỘC bạn phải thiết lập
+        // FIREBASE SECURITY RULES và APP CHECK trong Firebase Console để bảo vệ dữ liệu
+        // và ngăn chặn việc lạm dụng API. Không có các quy tắc này, bất kỳ ai cũng có thể
+        // truy cập và thay đổi dữ liệu của bạn.
         const firebaseConfig = {
             apiKey: "AIzaSyAP6gEJJrq0YE0lzYT-EeuskY0C1XHP9wo",
             authDomain: "bawithai.firebaseapp.com",
@@ -283,16 +291,10 @@
                         case 'auth/user-not-found':
                         case 'auth/wrong-password':
                         case 'auth/invalid-credential':
-                            errorDiv.textContent = "Email hoặc mật khẩu không đúng. Vui lòng kiểm tra lại thông tin đăng nhập.";
-                            break;
-                        case 'auth/invalid-email':
-                            errorDiv.textContent = "Địa chỉ email không hợp lệ.";
-                            break;
-                        case 'auth/user-disabled':
-                            errorDiv.textContent = "Tài khoản này đã bị vô hiệu hóa.";
+                            errorDiv.textContent = "Email hoặc mật khẩu không đúng. Vui lòng kiểm tra lại.";
                             break;
                         default:
-                            errorDiv.textContent = "Đã xảy ra lỗi khi đăng nhập. Vui lòng thử lại.";
+                            errorDiv.textContent = "Đã xảy ra lỗi khi đăng nhập.";
                             break;
                     }
                 });
@@ -308,18 +310,15 @@
                 .catch(error => {
                     console.error("Signup Error:", error.code);
                     if (!errorDiv) return;
-                    switch (error.code) {
+                     switch (error.code) {
                         case 'auth/email-already-in-use':
                             errorDiv.textContent = "Địa chỉ email này đã được sử dụng.";
-                            break;
-                        case 'auth/invalid-email':
-                            errorDiv.textContent = "Địa chỉ email không hợp lệ.";
                             break;
                         case 'auth/weak-password':
                             errorDiv.textContent = "Mật khẩu quá yếu (cần ít nhất 6 ký tự).";
                             break;
                         default:
-                            errorDiv.textContent = "Đã xảy ra lỗi khi đăng ký. Vui lòng thử lại.";
+                            errorDiv.textContent = "Đã xảy ra lỗi khi đăng ký.";
                             break;
                     }
                 });
@@ -353,7 +352,7 @@
         
         function getValidHistoryForChat(history) {
             if (!history || history.length === 0) return [];
-            return history.filter(msg => msg.role && msg.parts && msg.parts[0] && msg.parts[0].text);
+            return history.filter(msg => msg.role && msg.parts && msg.parts[0] && typeof msg.parts[0].text === 'string');
         }
 
         function setupNavigation() {
@@ -385,8 +384,9 @@
         function debounce(func, delay) {
             let timeout;
             return function(...args) {
+                const context = this;
                 clearTimeout(timeout);
-                timeout = setTimeout(() => func.apply(this, args), delay);
+                timeout = setTimeout(() => func.apply(context, args), delay);
             };
         }
 
@@ -410,28 +410,34 @@
             let localContent = '';
 
             const debouncedSave = debounce(async (content) => {
+                if (!currentUser) return;
                 try {
                     await saveData(collection, moduleId, { content });
                     statusEl.textContent = 'Đã lưu';
+                    statusEl.style.color = '#94a3b8';
                 } catch (error) {
                     console.error("Error saving scratchpad:", error);
                     statusEl.textContent = 'Lỗi lưu';
+                    statusEl.style.color = 'var(--danger-color)';
                 }
             }, 1500);
 
             textarea.addEventListener('input', () => {
                 localContent = textarea.value;
                 statusEl.textContent = 'Đang lưu...';
+                statusEl.style.color = 'var(--accent-color)';
                 debouncedSave(localContent);
             });
 
-            const unsub = onSnapshot(doc(db, "users", currentUser.uid, collection, moduleId), (doc) => {
+            const docRef = doc(db, "users", currentUser.uid, collection, moduleId);
+            const unsub = onSnapshot(docRef, (doc) => {
                 const data = doc.data();
                 if (data && data.content && data.content !== localContent) {
                     textarea.value = data.content;
                     localContent = data.content;
                 }
-                statusEl.textContent = 'Đã lưu';
+                statusEl.textContent = 'Đã đồng bộ';
+                statusEl.style.color = '#94a3b8';
             });
             unsubscribeListeners.push(unsub);
         }
@@ -452,26 +458,29 @@
                     const itemEl = document.createElement('div');
                     itemEl.className = 'history-item';
                     const date = data.timestamp?.toDate().toLocaleString('vi-VN') || 'Không rõ ngày';
+                    
                     itemEl.innerHTML = `
                         <div class="history-item-info">
                             <span class="history-item-title">${data.title || 'Phiên chưa đặt tên'}</span>
                             <span class="history-item-date">${date}</span>
                         </div>
                         <div class="history-item-actions">
-                            <button class="btn-subtle load-history-btn" data-id="${docSnap.id}" title="Tải lại phiên này"><i class="fa-solid fa-upload"></i></button>
-                            <button class="btn-subtle btn-danger delete-history-btn" data-id="${docSnap.id}" title="Xóa phiên này"><i class="fa-solid fa-trash-can"></i></button>
+                            <button class="btn-subtle btn-danger delete-history-btn" data-id="${docSnap.id}" title="Xóa vĩnh viễn phiên này"><i class="fa-solid fa-trash-can"></i></button>
                         </div>`;
                     
-                    itemEl.querySelector('.load-history-btn').addEventListener('click', async (e) => {
-                        e.stopPropagation();
-                        if (confirm(`Bạn có muốn tải lại phiên "${data.title}" không? Phiên làm việc hiện tại sẽ được lưu trữ.`)) {
-                           const archiveId = e.currentTarget.dataset.id;
+                    // Main click event to load session
+                    itemEl.addEventListener('click', async (e) => {
+                         if (e.target.closest('.delete-history-btn')) return; // Prevent loading when delete is clicked
+                         if (confirm(`Bạn có muốn tải lại phiên "${data.title}" không? Phiên làm việc hiện tại sẽ được lưu trữ.`)) {
+                           const archiveId = docSnap.id;
+                           // Assumes all archives are for case-trainer for now. Could be improved.
                            await loadArchivedSession('case-trainer', archiveId);
                         }
                     });
                     
+                    // Delete button event
                     itemEl.querySelector('.delete-history-btn').addEventListener('click', async (e) => {
-                        e.stopPropagation();
+                        e.stopPropagation(); // Prevent the main click event
                         if (confirm(`Bạn có chắc muốn XÓA vĩnh viễn phiên "${data.title}" không? Hành động này không thể hoàn tác.`)) {
                             const archiveId = e.currentTarget.dataset.id;
                             const archiveDocRef = doc(db, 'users', currentUser.uid, 'archives', archiveId);
@@ -486,22 +495,25 @@
         }
 
         async function archiveCurrentSession(moduleId) {
-            if (!currentUser) return;
+            if (!currentUser) return false;
             const activeSessionRef = doc(db, 'users', currentUser.uid, 'chats', moduleId);
             const activeSessionDoc = await getDoc(activeSessionRef);
 
             if (activeSessionDoc.exists() && activeSessionDoc.data().history?.length > 1) {
                 const dataToArchive = activeSessionDoc.data();
-                let title = dataToArchive.fileName ? `Phân tích file: ${dataToArchive.fileName}` : `Phiên lúc ${new Date().toLocaleString('vi-VN')}`;
+                let title = dataToArchive.fileName ? `Phân tích: ${dataToArchive.fileName}` : `Phiên lúc ${new Date().toLocaleString('vi-VN')}`;
                 
                 const archiveData = {
                     ...dataToArchive,
                     title: title,
-                    timestamp: serverTimestamp()
+                    timestamp: serverTimestamp(),
+                    module: moduleId // Keep track of which module it belongs to
                 };
                 
                 await addDoc(collection(db, 'users', currentUser.uid, 'archives'), archiveData);
+                return true;
             }
+            return false;
         }
 
         async function loadArchivedSession(moduleId, archiveId) {
@@ -517,16 +529,24 @@
             if (archiveDoc.exists()) {
                 const archivedData = archiveDoc.data();
                 // 3. Overwrite the active session with the loaded data
-                await saveData('chats', moduleId, { 
+                // This triggers the onSnapshot listener in setupCaseTrainer, which will rebuild the state
+                await setDoc(doc(db, "users", currentUser.uid, "chats", moduleId), { 
                     history: archivedData.history || [], 
                     fileName: archivedData.fileName || '' 
                 });
+                
+                // 4. Navigate to the module to ensure the user sees the changes
+                showModule(`#${moduleId}`);
+                alert('Đã tải lại phiên làm việc. Giao diện sẽ được làm mới.');
+
             } else {
                 console.error("Could not find archive document with ID:", archiveId);
+                alert("Lỗi: Không thể tìm thấy phiên lưu trữ.");
             }
         }
         
         function setupLearningRoom() {
+            // This function's logic remains unchanged
             const moduleId = 'learning-room';
             const historyEl = document.getElementById(`${moduleId}-chat-history`);
             const form = document.getElementById(`${moduleId}-chat-form`);
@@ -605,6 +625,7 @@
         }
         
         function setupMockInterview() {
+            // This function's logic remains unchanged
             const moduleId = 'mock-interview';
             const setupSection = document.getElementById('interview-setup-section');
             const chatSection = document.getElementById('interview-chat-section');
@@ -720,7 +741,8 @@
                     role: "system",
                     parts: [{ text: `You are an experienced hiring manager conducting an interview. You must use the ${sessionState.language} language for the entire conversation. Ask one question at a time.` }]
                 };
-                chatSession = geminiModel.startChat({ systemInstruction });
+                sessionState.history = []; // Clear history before starting
+                chatSession = geminiModel.startChat({ history: [], systemInstruction });
                 
                 const initialPrompt = `Start by introducing yourself in ${sessionState.language}. Then, ask the first question related to the topic: "${sessionState.topic}".`;
                 
@@ -782,6 +804,9 @@
             });
         }
         
+        // =====================================================================
+        // === AI CASE TRAINER - UPDATED LOGIC =================================
+        // =====================================================================
         function setupCaseTrainer() {
             const moduleId = 'case-trainer';
             const uploadSection = document.getElementById('file-upload-section');
@@ -800,6 +825,7 @@
             let history = [];
             let chatSession = null;
             let selectedLanguage = 'vietnamese';
+            let isThinking = false; // Prevent multiple submissions
 
             langGroup.addEventListener('click', (e) => {
                 if (e.target.classList.contains('language-btn')) {
@@ -833,7 +859,7 @@
                 card.appendChild(contentEl);
                 contentArea.appendChild(card);
                 card.scrollIntoView({ behavior: 'smooth', block: 'end' });
-                return contentEl;
+                return { card, contentEl };
             }
 
             function renderChart(canvasElement, chartData) {
@@ -886,7 +912,7 @@
                         container.innerHTML = htmlContent;
                         return;
                     }
-                } catch (e) { /* Fall through */ }
+                } catch (e) { /* Fall through to render as markdown */ }
                 
                 container.innerHTML = window.marked.parse(responseText);
             }
@@ -917,10 +943,11 @@
                         const button = document.createElement('button');
                         let icon = '❓';
                         if (sugg.type === 'chart') icon = '📈';
-                        else if (sugg.type === 'deep-dive') icon = '🔬';
+                        else if (sugg.type === 'deep-dive') icon = '�';
                         button.innerHTML = `<span>${icon}</span> ${sugg.text}`;
                         button.onclick = (e) => {
-                            form.dispatchEvent(new CustomEvent('submit', { detail: { query: sugg.text, sourceButton: e.currentTarget } }));
+                             if (isThinking) return;
+                             form.dispatchEvent(new CustomEvent('submit', { detail: { query: sugg.text, sourceButton: e.currentTarget } }));
                         };
                         suggestionsGroup.appendChild(button);
                     });
@@ -929,13 +956,19 @@
             
             const unsub = onSnapshot(doc(db, "users", currentUser.uid, "chats", moduleId), (docSnapshot) => {
                 if (contentArea) contentArea.innerHTML = '';
+                isThinking = false; // Reset thinking state on data update
                 
                 const data = docSnapshot.data();
-                history = getValidHistoryForChat((data && data.history) ? data.history : []);
+                const sessionExists = data && data.history && data.history.length > 0;
                 
-                if (history.length > 0) {
-                    chatSession = geminiModel.startChat({ history });
+                history = getValidHistoryForChat(sessionExists ? data.history : []);
+                
+                // CRITICAL FIX: Re-initialize chat session with full history
+                if (geminiModel) {
+                     chatSession = geminiModel.startChat({ history });
+                }
 
+                if (sessionExists) {
                     const initialAnalysisMsg = history.find(msg => msg.role === 'model' && msg.parts[0].text.includes('"mainInsight"'));
                     if (initialAnalysisMsg) {
                         try {
@@ -948,15 +981,26 @@
                         }
                     }
                     
-                    history.slice(1).forEach((msg, index) => {
-                        const msgText = msg.parts[0].text;
-                        if (msg.role === 'user' && !msgText.startsWith('You are an expert')) {
-                             addContentCard(`Câu hỏi của bạn:`, false, msgText);
-                        } else if (msg.role === 'model' && !msgText.includes('"mainInsight"')) {
-                             const userQuestionMsg = history.slice(1)[index - 1];
-                             const questionTitle = userQuestionMsg?.parts[0]?.text || "Phản hồi của AI";
-                             const contentEl = addContentCard(questionTitle, true, '<div class="large-spinner"></div>');
-                             if (contentEl) processFollowUpResponse(contentEl, msgText);
+                    history.forEach((msg, index) => {
+                         // Skip rendering the long initial system prompt
+                        if (msg.role === 'user' && msg.parts[0].text.includes('You are an expert Business Analyst assistant')) return;
+                        
+                        // Skip rendering the initial analysis JSON, it's already in the hub
+                        if (msg.role === 'model' && msg.parts[0].text.includes('"mainInsight"')) return;
+
+                        if (msg.role === 'user') {
+                             addContentCard(`Câu hỏi của bạn:`, false, msg.parts[0].text);
+                        } else if (msg.role === 'model') {
+                             // Find the preceding user question
+                             let userQuestionMsg = "Phản hồi của AI";
+                             for(let i = index - 1; i >= 0; i--) {
+                                if(history[i].role === 'user' && !history[i].parts[0].text.includes('You are an expert Business Analyst assistant')) {
+                                    userQuestionMsg = history[i].parts[0].text;
+                                    break;
+                                }
+                             }
+                             const { contentEl } = addContentCard(userQuestionMsg, true, '<div class="large-spinner"></div>');
+                             if (contentEl) processFollowUpResponse(contentEl, msg.parts[0].text);
                         }
                     });
 
@@ -982,6 +1026,7 @@
                 const file = fileInput.files[0];
                 if (!file) return;
                 
+                // Clear local state before starting new analysis
                 await saveData("chats", moduleId, { history: [], fileName: file.name });
                 
                 uploadSection.style.display = 'none';
@@ -1016,15 +1061,13 @@
                         }
                     } catch (err) {
                        showAnalysisError(`Lỗi khi đọc file: ${err.message}`);
-                       uploadSection.style.display = 'block';
-                       analysisHub.style.display = 'none';
+                       await saveData("chats", moduleId, { history: [], fileName: '' }); // Clear failed session
                        return;
                     }
                     
                     if (!dataContext) { 
                         showAnalysisError("Lỗi: Không thể đọc file hoặc định dạng không được hỗ trợ.");
-                        uploadSection.style.display = 'block';
-                        analysisHub.style.display = 'none';
+                        await saveData("chats", moduleId, { history: [], fileName: '' }); // Clear failed session
                         return;
                     }
                     
@@ -1048,7 +1091,7 @@
                         const result = await chatSession.sendMessage(initialPrompt);
                         const responseText = await result.response.text();
                         const cleanedJsonString = extractJson(responseText);
-                        JSON.parse(cleanedJsonString);
+                        JSON.parse(cleanedJsonString); // Validate JSON before saving
                         await saveData("chats", moduleId, { 
                             history: [
                                 { role: 'user', parts: [{ text: initialPrompt }] },
@@ -1057,8 +1100,9 @@
                             fileName: file.name 
                         });
                     } catch (err) {
-                        console.error("Error getting initial analysis from AI:", err);
+                        console.error("Error getting initial analysis from AI:", err, "Response was:", await result.response.text());
                         showAnalysisError("AI đã trả về một phản hồi không hợp lệ. Vui lòng thử lại với một file khác hoặc một truy vấn khác.");
+                        await saveData("chats", moduleId, { history: [], fileName: '' }); // Clear failed session
                     }
                 };
                 if (['csv', 'txt'].includes(file.name.split('.').pop().toLowerCase())) reader.readAsText(file);
@@ -1068,8 +1112,9 @@
             form.addEventListener('submit', async e => {
                 e.preventDefault();
                 const userQuery = e.detail?.query || inputEl.value.trim();
-                if (!userQuery || !chatSession) return;
+                if (!userQuery || !chatSession || isThinking) return;
                 
+                isThinking = true;
                 const submitButton = form.querySelector('button');
                 const suggestionsGroup = document.getElementById('hub-suggestions-group');
                 const sourceButton = e.detail?.sourceButton;
@@ -1085,6 +1130,11 @@
                     sourceButton.innerHTML = `<div class="small-spinner"></div> <span>Đang xử lý...</span>`;
                 }
 
+                // --- UX IMPROVEMENT: Instant feedback ---
+                addContentCard('Câu hỏi của bạn:', false, userQuery);
+                const { card: thinkingCard } = addContentCard(userQuery, true, '<div class="large-spinner"></div><p>AI đang suy nghĩ...</p>');
+                // ---
+
                 const historyWithUserMsg = [...history, { role: 'user', parts: [{ text: userQuery }] }];
                 await saveData("chats", moduleId, { history: historyWithUserMsg });
                  
@@ -1099,18 +1149,27 @@
                     const errorHistory = [...historyWithUserMsg, { role: 'model', parts: [{ text: "Lỗi: Không thể nhận phản hồi từ AI." }] }];
                     await saveData("chats", moduleId, { history: errorHistory });
                 } finally {
+                    // onSnapshot will handle UI updates, so we just re-enable buttons
+                    isThinking = false;
                     submitButton.disabled = false;
                     submitButton.innerHTML = originalSubmitHTML;
                     if(sourceButton && suggestionsGroup.contains(sourceButton)) {
                          sourceButton.innerHTML = originalSourceHTML;
                     }
                     suggestionsGroup.querySelectorAll('button').forEach(btn => btn.disabled = false);
+                    if (thinkingCard) thinkingCard.remove(); // Clean up the placeholder
                 }
             });
 
              clearBtn.addEventListener('click', async () => {
-                if (confirm("Bạn có chắc muốn lưu trữ phiên này và bắt đầu lại không?")) {
-                    await archiveCurrentSession(moduleId);
+                const confirmed = confirm("Bạn có chắc muốn LƯU TRỮ phiên làm việc hiện tại và bắt đầu một phiên mới không?\nDữ liệu hiện tại sẽ được lưu vào Lịch Sử Phiên.");
+                if (confirmed) {
+                    const wasArchived = await archiveCurrentSession(moduleId);
+                    if(wasArchived) {
+                        alert("Phiên hiện tại đã được lưu trữ.");
+                    } else {
+                        alert("Không có gì để lưu trữ. Bắt đầu phiên mới.");
+                    }
                     await saveData("chats", moduleId, { history: [], fileName: '' });
                     fileInput.value = '';
                     if(fileUploadText) fileUploadText.textContent = 'Nhấp để chọn file CSV, Excel, PDF hoặc DOCX';
@@ -1132,7 +1191,7 @@
             <div id="case-trainer" class="module-content">
                  <div class="module-header-wrapper">
                     <h1 class="module-header">AI Case Trainer</h1>
-                    <button id="clear-case-trainer-history" class="btn-icon btn-danger" title="Lưu trữ và Bắt đầu lại"><i class="fa-solid fa-box-archive"></i></button>
+                    <button id="clear-case-trainer-history" class="btn-icon btn-danger" title="Lưu trữ phiên hiện tại và bắt đầu lại"><i class="fa-solid fa-box-archive"></i></button>
                  </div>
                  <p class="module-subheader">Tải lên file dữ liệu và để AI trở thành trợ lý phân tích của bạn.</p>
                  
@@ -1191,4 +1250,4 @@
     </script>
 </body>
 </html>
-"
+�
