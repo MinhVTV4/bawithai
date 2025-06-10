@@ -77,6 +77,13 @@
         .case-trainer-header {
             justify-content: flex-start;
             gap: 20px;
+            align-items: center;
+        }
+
+        .header-actions {
+            margin-left: auto;
+            display: flex;
+            gap: 10px;
         }
 
         button { padding: 10px 20px; background-color: var(--accent-color); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 1rem; transition: background-color 0.3s ease; display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-weight: 600; }
@@ -952,10 +959,12 @@
             const inputEl = document.getElementById('case-trainer-chat-input');
             const contentArea = document.getElementById('analysis-content-area');
             const clearBtn = document.getElementById('clear-case-trainer-history');
+            const exportBtn = document.getElementById('export-analysis-btn');
 
             if(!uploadSection || !analysisHub || !fileInput || !form || !clearBtn || !progressContainer) return;
 
             let history = [];
+            let currentFileName = '';
             let chatSession = null;
             let selectedLanguage = 'vietnamese';
             let isThinking = false; 
@@ -1241,6 +1250,7 @@
                 const data = docSnapshot.data();
                 const sessionExists = data && data.history && data.history.length > 0;
                 currentArchiveId = (data && data.activeArchiveId) ? data.activeArchiveId : null;
+                currentFileName = data?.fileName || '';
                 history = getValidHistoryForChat(sessionExists ? data.history : []);
                 if (geminiModel) chatSession = geminiModel.startChat({ history });
 
@@ -1432,6 +1442,78 @@ The JSON response must be in the ${selectedLanguage} language.`;
                     if(currentSuggestionsGroup) currentSuggestionsGroup.querySelectorAll('button').forEach(btn => btn.disabled = false);
                 }
             });
+            
+            async function exportAnalysis() {
+                if (history.length === 0) {
+                    alert("Không có nội dung để xuất.");
+                    return;
+                }
+
+                let markdownContent = `# Báo cáo Phân tích: ${currentFileName}\n\n`;
+
+                const initialAnalysisMsg = history.find(msg => msg.role === 'model' && msg.parts[0].text.includes('"mainInsight"'));
+                if (initialAnalysisMsg) {
+                    try {
+                        const initialData = JSON.parse(extractJson(initialAnalysisMsg.parts[0].text));
+                        markdownContent += `## 🚀 Insight Chính\n\n`;
+                        markdownContent += `> ${initialData.mainInsight}\n\n`;
+                        
+                        markdownContent += `## 📊 Các Chỉ số Chính\n\n`;
+                        initialData.keyMetrics.forEach(metric => {
+                            markdownContent += `- **${metric.label}:** ${metric.value}\n`;
+                        });
+                        markdownContent += `\n`;
+                    } catch (e) {
+                        console.error("Không thể phân tích dữ liệu ban đầu để xuất.", e);
+                    }
+                }
+
+                markdownContent += `## 💬 Lịch sử Hỏi & Đáp\n\n`;
+
+                history.forEach(msg => {
+                    if (msg.role === 'user' && msg.parts[0].text.includes('You are an expert Business Analyst assistant')) {
+                        return;
+                    }
+                    if (msg.role === 'model' && msg.parts[0].text.includes('"mainInsight"')) {
+                        return;
+                    }
+
+                    if (msg.role === 'user') {
+                        markdownContent += `### 🧑‍💻 Câu hỏi của bạn:\n${msg.parts[0].text}\n\n`;
+                    } else if (msg.role === 'model') {
+                        let aiResponse = msg.parts[0].text;
+                        if(aiResponse.includes('<chart>')) {
+                            aiResponse = "[Một biểu đồ đã được tạo trong ứng dụng]\n";
+                        } else {
+                            try {
+                               const parsedResponse = JSON.parse(extractJson(aiResponse));
+                               if (parsedResponse.title && parsedResponse.sections) {
+                                   let deepDiveText = `**${parsedResponse.title}**\n\n`;
+                                   parsedResponse.sections.forEach(sec => {
+                                       deepDiveText += `**${sec.heading}**\n${sec.content}\n\n`;
+                                   });
+                                   aiResponse = deepDiveText;
+                               }
+                            } catch(e) {
+                                // Plain markdown
+                            }
+                        }
+                        markdownContent += `### 🤖 Phản hồi của AI:\n${aiResponse}\n\n---\n\n`;
+                    }
+                });
+
+                const blob = new Blob([markdownContent], { type: 'text/markdown;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `BA_Studio_Report_${currentFileName.split('.')[0] || 'analysis'}.md`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }
+
+            exportBtn?.addEventListener('click', exportAnalysis);
 
              clearBtn.addEventListener('click', async () => {
                 const isUpdating = currentArchiveId !== null;
@@ -1492,7 +1574,10 @@ The JSON response must be in the ${selectedLanguage} language.`;
             <div id="case-trainer" class="module-content">
                  <div class="module-header-wrapper case-trainer-header">
                     <h1 class="module-header">AI Case Trainer</h1>
-                    <button id="clear-case-trainer-history" class="btn-icon" title="Lưu trữ hoặc Cập nhật phiên và Bắt đầu lại"><i class="fa-solid fa-floppy-disk"></i></button>
+                    <div class="header-actions">
+                        <button id="export-analysis-btn" class="btn-icon" title="Tải xuống báo cáo"><i class="fa-solid fa-download"></i></button>
+                        <button id="clear-case-trainer-history" class="btn-icon" title="Lưu trữ hoặc Cập nhật phiên và Bắt đầu lại"><i class="fa-solid fa-floppy-disk"></i></button>
+                    </div>
                  </div>
                  <p class="module-subheader">Tải lên file dữ liệu và để AI trở thành trợ lý phân tích của bạn.</p>
                  
@@ -1580,4 +1665,4 @@ The JSON response must be in the ${selectedLanguage} language.`;
         }
     </script>
 </body>
-</html>
+</ht
