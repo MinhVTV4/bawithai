@@ -1287,12 +1287,15 @@ The JSON response must be in the ${selectedLanguage} language.`;
                 submitButton.disabled = true;
                 submitButton.innerHTML = `<div class="small-spinner"></div>`;
                 if(suggestionsGroup) suggestionsGroup.querySelectorAll('button').forEach(btn => btn.disabled = true);
+                if (!e.detail?.query) {
+                    inputEl.value = '';
+                }
 
                 const historyWithUserMsg = [...history, { role: 'user', parts: [{ text: userQuery }] }];
                 await saveData("chats", moduleId, { history: historyWithUserMsg });
                  
                 try {
-                    const result = await chatSession.sendMessage([{ text: userQuery }]);
+                    const result = await chatSession.sendMessage(userQuery);
                     const fullResponseText = await result.response.text();
                     const finalHistory = [...historyWithUserMsg, { role: 'model', parts: [{ text: fullResponseText }] }];
                     await saveData("chats", moduleId, { history: finalHistory });
@@ -1304,7 +1307,8 @@ The JSON response must be in the ${selectedLanguage} language.`;
                     isThinking = false;
                     submitButton.disabled = false;
                     submitButton.innerHTML = originalButtonHTML;
-                    if(suggestionsGroup) suggestionsGroup.querySelectorAll('button').forEach(btn => btn.disabled = false);
+                    const currentSuggestionsGroup = document.getElementById('hub-suggestions-group');
+                    if(currentSuggestionsGroup) currentSuggestionsGroup.querySelectorAll('button').forEach(btn => btn.disabled = false);
                 }
             });
 
