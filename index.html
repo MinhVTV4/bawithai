@@ -610,27 +610,38 @@
 
             const unsub = onSnapshot(doc(db, "users", currentUser.uid, "chats", moduleId), (doc) => {
                 isThinking = false;
-                historyEl.innerHTML = '';
+                if(historyEl) historyEl.innerHTML = '';
                 const data = doc.data();
                 history = getValidHistoryForChat((data && data.history) ? data.history : []);
                 
-                chatSession = geminiModel.startChat({ history, systemInstruction });
+                if(geminiModel) chatSession = geminiModel.startChat({ history, systemInstruction });
 
                 if (history.length > 0) {
                     history.forEach(msg => {
                         const sender = msg.role === 'user' ? 'user' : 'ai';
                         const messageDiv = document.createElement('div');
                         messageDiv.className = `chat-message ${sender}-message`;
-                        messageDiv.innerHTML = window.marked.parse(msg.parts[0].text);
-                        historyEl.appendChild(messageDiv);
+                        // SỬA LỖI: Kiểm tra window.marked trước khi dùng
+                        if (window.marked) {
+                            messageDiv.innerHTML = window.marked.parse(msg.parts[0].text);
+                        } else {
+                            messageDiv.textContent = msg.parts[0].text;
+                        }
+                        if(historyEl) historyEl.appendChild(messageDiv);
                     });
                 } else {
                      const aiMsgContainer = document.createElement('div');
                      aiMsgContainer.className = 'chat-message ai-message';
-                     aiMsgContainer.innerHTML = window.marked.parse("Xin chào! Tôi là trợ lý học tập BA của bạn. Bạn muốn hỏi về chủ đề gì hôm nay?");
-                     historyEl.appendChild(aiMsgContainer);
+                     // SỬA LỖI: Kiểm tra window.marked trước khi dùng
+                     const welcomeText = "Xin chào! Tôi là trợ lý học tập BA của bạn. Bạn muốn hỏi về chủ đề gì hôm nay?";
+                     if (window.marked) {
+                        aiMsgContainer.innerHTML = window.marked.parse(welcomeText);
+                     } else {
+                        aiMsgContainer.textContent = welcomeText;
+                     }
+                     if(historyEl) historyEl.appendChild(aiMsgContainer);
                 }
-                 historyEl.scrollTop = historyEl.scrollHeight;
+                 if(historyEl) historyEl.scrollTop = historyEl.scrollHeight;
             });
             unsubscribeListeners.push(unsub);
             
@@ -727,17 +738,19 @@
             }
 
             const unsub = onSnapshot(doc(db, "users", currentUser.uid, "chats", moduleId), (docSnapshot) => {
-                historyEl.innerHTML = '';
+                if(historyEl) historyEl.innerHTML = '';
                 isThinking = false;
                 const data = docSnapshot.data();
                 sessionState = data ? { ...{history:[], inProgress: false, language: 'vietnamese', topic: null}, ...data } : sessionState;
                 sessionState.history = getValidHistoryForChat(sessionState.history);
 
-                const systemInstruction = {
-                    role: "system",
-                    parts: [{ text: `You are an experienced hiring manager conducting an interview. You must use the ${sessionState.language} language for the entire conversation. Ask one question at a time.` }]
-                };
-                chatSession = geminiModel.startChat({ history: sessionState.history, systemInstruction });
+                if(geminiModel) {
+                    const systemInstruction = {
+                        role: "system",
+                        parts: [{ text: `You are an experienced hiring manager conducting an interview. You must use the ${sessionState.language} language for the entire conversation. Ask one question at a time.` }]
+                    };
+                    chatSession = geminiModel.startChat({ history: sessionState.history, systemInstruction });
+                }
 
                 if (sessionState.inProgress) {
                     sessionState.history.forEach(msg => {
@@ -746,14 +759,20 @@
                         const senderClass = msg.role === 'user' ? 'user-message' : 'ai-message';
                         const messageDiv = document.createElement('div');
                         messageDiv.className = `chat-message ${senderClass}`;
-                        messageDiv.innerHTML = window.marked.parse(msg.parts[0].text);
-                        historyEl.appendChild(messageDiv);
+                        // SỬA LỖI: Kiểm tra window.marked trước khi dùng
+                        if (window.marked) {
+                            messageDiv.innerHTML = window.marked.parse(msg.parts[0].text);
+                        } else {
+                            messageDiv.textContent = msg.parts[0].text;
+                        }
+                        
+                        if(historyEl) historyEl.appendChild(messageDiv);
                         
                         if (msg.role === 'model') {
                            addSpeakButton(messageDiv, sessionState.language);
                         }
                     });
-                     historyEl.scrollTop = historyEl.scrollHeight;
+                     if(historyEl) historyEl.scrollTop = historyEl.scrollHeight;
                     setupSection.style.display = 'none';
                     chatSection.style.display = 'block';
                 } else {
@@ -791,7 +810,7 @@
                 try {
                     const systemInstruction = { role: "system", parts: [{ text: `You are an experienced hiring manager...` }] };
                     sessionState.history = []; // Clear history before starting
-                    chatSession = geminiModel.startChat({ history: [], systemInstruction });
+                    if(geminiModel) chatSession = geminiModel.startChat({ history: [], systemInstruction });
                     
                     const initialPrompt = `Start by introducing yourself in ${sessionState.language}. Then, ask the first question related to the topic: "${sessionState.topic}".`;
                     
@@ -861,6 +880,9 @@
         function setupCaseTrainer() {
             const moduleId = 'case-trainer';
             const uploadSection = document.getElementById('file-upload-section');
+            const progressContainer = document.getElementById('analysis-progress-container');
+            const progressStatusText = document.getElementById('progress-status-text');
+            const progressStatusDetail = document.getElementById('progress-status-detail');
             const analysisHub = document.getElementById('analysis-hub');
             const fileInput = document.getElementById('fileInput');
             const fileUploadText = document.getElementById('file-upload-text');
@@ -871,7 +893,7 @@
             const contentArea = document.getElementById('analysis-content-area');
             const clearBtn = document.getElementById('clear-case-trainer-history');
 
-            if(!uploadSection || !analysisHub || !fileInput || !form || !clearBtn) return;
+            if(!uploadSection || !analysisHub || !fileInput || !form || !clearBtn || !progressContainer) return;
 
             let history = [];
             let chatSession = null;
@@ -880,6 +902,11 @@
             let currentArchiveId = null; 
             let bookmarkedPrompts = new Set(); 
             let bookmarkedDocs = new Map();
+            
+            const updateProgress = (mainText, detailText = '') => {
+                if (progressStatusText) progressStatusText.textContent = mainText;
+                if (progressStatusDetail) progressStatusDetail.textContent = detailText;
+            };
 
             const bookmarksCollectionRef = collection(db, 'users', currentUser.uid, 'bookmarked_prompts');
             const unsubBookmarks = onSnapshot(bookmarksCollectionRef, (snapshot) => {
@@ -923,10 +950,17 @@
             
             function showAnalysisError(message) {
                 const mainInsightContainer = document.querySelector('#analysis-hub .main-insight-card-container');
-                if (!mainInsightContainer) return;
-                mainInsightContainer.innerHTML = `<div class="error-card"><i class="fa-solid fa-triangle-exclamation"></i><p>${message}</p></div>`;
-                document.getElementById('analysis-hub-key-metrics-grid').innerHTML = '';
-                document.getElementById('hub-suggestions-group').innerHTML = '';
+                if (progressContainer.style.display !== 'none') {
+                     updateProgress('Lỗi Phân Tích!', message);
+                     setTimeout(() => {
+                        progressContainer.style.display = 'none';
+                        uploadSection.style.display = 'block';
+                     }, 3000);
+                } else if(mainInsightContainer) {
+                    mainInsightContainer.innerHTML = `<div class="error-card"><i class="fa-solid fa-triangle-exclamation"></i><p>${message}</p></div>`;
+                    document.getElementById('analysis-hub-key-metrics-grid').innerHTML = '';
+                    document.getElementById('hub-suggestions-group').innerHTML = '';
+                }
             }
 
             function addContentCard(title, isHTML = false, content = '', textToBookmark = '') {
@@ -1002,7 +1036,11 @@
                         const remainingText = responseText.replace(chartRegex, '').trim();
                         if (remainingText) {
                             const textEl = document.createElement('div');
-                            textEl.innerHTML = window.marked.parse(remainingText);
+                            if (window.marked) {
+                                textEl.innerHTML = window.marked.parse(remainingText);
+                            } else {
+                                textEl.textContent = remainingText;
+                            }
                             container.prepend(textEl);
                         }
                         return;
@@ -1019,13 +1057,23 @@
                         let htmlContent = '';
                         responseObj.sections.forEach(section => {
                             if (section.heading) htmlContent += `<h5>${section.heading}</h5>`;
-                            if (section.content) htmlContent += window.marked.parse(section.content);
+                            if (section.content) {
+                                if (window.marked) {
+                                    htmlContent += window.marked.parse(section.content);
+                                } else {
+                                    htmlContent += `<p>${section.content}</p>`;
+                                }
+                            }
                         });
                         container.innerHTML = htmlContent;
                         return;
                     }
                 } catch (e) { /* Fall through */ }
-                container.innerHTML = window.marked.parse(responseText);
+                if (window.marked) {
+                    container.innerHTML = window.marked.parse(responseText);
+                } else {
+                    container.textContent = responseText;
+                }
             }
             
             function populateAnalysisHub(responseObj) {
@@ -1054,7 +1102,7 @@
                             wrapper.className = 'suggestion-button';
                             const button = document.createElement('button');
                             let icon = '❓';
-                            if (sugg.type === 'chart') icon = '�';
+                            if (sugg.type === 'chart') icon = '📈';
                             else if (sugg.type === 'deep-dive') icon = '🔬';
                             button.innerHTML = `<span>${icon}</span> ${sugg.text}`;
                             button.onclick = (e) => { if (isThinking) return; form.dispatchEvent(new CustomEvent('submit', { detail: { query: sugg.text, sourceButton: e.currentTarget } })); };
@@ -1119,9 +1167,11 @@
                     }
                     uploadSection.style.display = 'none';
                     analysisHub.style.display = 'block';
+                    progressContainer.style.display = 'none'; 
                 } else {
                     uploadSection.style.display = 'block';
                     analysisHub.style.display = 'none';
+                    progressContainer.style.display = 'none'; 
                 }
             });
             unsubscribeListeners.push(unsub);
@@ -1134,15 +1184,15 @@
             });
             
             analyzeBtn?.addEventListener('click', async () => {
-                const originalBtnHTML = analyzeBtn.innerHTML;
-                analyzeBtn.disabled = true;
-                analyzeBtn.innerHTML = `<span><div class="small-spinner"></div> Đang xử lý...</span>`;
+                uploadSection.style.display = 'none';
+                progressContainer.style.display = 'block';
+                updateProgress('Bước 1/4: Đang xử lý file...');
+
                 try {
                     await archiveCurrentSession(moduleId);
                     const file = fileInput.files[0];
                     if (!file) throw new Error("Không có file được chọn");
 
-                    // === LẤY MỤC TIÊU CỦA NGƯỜI DÙNG ===
                     const objective = document.getElementById('analysisObjective').value.trim();
 
                     await saveData("chats", moduleId, { history: [], fileName: file.name, activeArchiveId: null });
@@ -1167,34 +1217,49 @@
                             return; 
                         }
 
-                        // === CẬP NHẬT LẠI PROMPT VỚI MỤC TIÊU ===
-                        let objectiveInstruction = '';
-                        if (objective) {
-                            objectiveInstruction = `The user's primary analysis objective is: "${objective}". Your entire analysis, including the main insight, key metrics, and suggestions, should be focused on addressing this objective first and foremost.`;
-                        }
-
-                        const initialPrompt = `You are an expert Business Analyst assistant. Your response language MUST be ${selectedLanguage}. The user has uploaded the following data:\n---DATA---\n${dataContext.substring(0, 100000)}\n---END DATA---\n${objectiveInstruction}\nYour entire response MUST be a single, strictly valid, data-only JSON object, with no surrounding text, markdown, or explanations. CRITICALLY, this JSON must be 100% serializable and MUST NOT contain any JavaScript functions, comments, or any other non-standard JSON syntax. The JSON object must have the following keys: "mainInsight" (String), "keyMetrics" (Array of {label: String, value: String}), "curatedSuggestions" (Array of {type: String, text: String}). **Follow-up Response Rules (Very Important):** If a follow-up asks for a chart, respond ONLY with a strictly valid, 100% serializable Chart.js (v3+) JSON object inside <chart> tags. DO NOT include functions, comments, or any non-standard syntax. Example: <chart>{ "type": "bar", ... }</chart>. If a follow-up asks for a deep-dive, respond ONLY with a strictly valid JSON object: { "title": "...", "sections": [ { "heading": "...", "content": "..." } ] }. Otherwise, provide a concise answer in Markdown. Now, generate the initial analysis hub JSON response in ${selectedLanguage}.`;
+                        updateProgress('Bước 2/4: Đã đọc file. Gửi dữ liệu đến AI...', 'Việc này có thể mất một chút thời gian...');
                         
+                        const initialPrompt = `You are an expert Business Analyst assistant. Your response language MUST be ${selectedLanguage}.
+Analyze the following data based on the user's objective.
+USER OBJECTIVE: "${objective || 'Provide a general analysis'}"
+DATA:
+---
+${dataContext.substring(0, 100000)}
+---
+CRITICAL INSTRUCTION: Your entire output MUST be ONLY the raw text of a single, strictly valid JSON object. Do not include \`\`\`json, any conversational text, introductions, or explanations. The JSON object is the only thing you should output. It must have these exact keys: "mainInsight" (String), "keyMetrics" (Array of {label: String, value: String}), "curatedSuggestions" (Array of {type: String, text: String}).
+The JSON response must be in the ${selectedLanguage} language.`;
+                        
+                        let responseText = '';
                         chatSession = geminiModel.startChat();
                         try {
                             const result = await chatSession.sendMessage(initialPrompt);
-                            const responseText = await result.response.text();
+                            updateProgress('Bước 3/4: AI đã phản hồi. Đang xử lý kết quả...');
+                            responseText = await result.response.text();
                             const cleanedJsonString = extractJson(responseText);
-                            JSON.parse(cleanedJsonString);
+                            JSON.parse(cleanedJsonString); 
+                            updateProgress('Bước 4/4: Hoàn tất! Đang hiển thị kết quả...');
+                            
                             await saveData("chats", moduleId, { history: [{ role: 'user', parts: [{ text: initialPrompt }] }, { role: 'model', parts: [{ text: cleanedJsonString }] }], fileName: file.name });
+                            
+                            setTimeout(() => {
+                                progressContainer.style.display = 'none';
+                            }, 1000);
+
                         } catch (err) { 
-                            console.error("Error initial analysis:", err);
+                            console.error("Error initial analysis:", err, "Raw AI response:", responseText);
                             showAnalysisError("AI trả về phản hồi không hợp lệ. Vui lòng thử lại."); 
                             await saveData("chats", moduleId, { history:[], fileName:'', activeArchiveId: null }); 
                         }
                     };
+
+                    reader.onerror = () => {
+                        showAnalysisError('Lỗi nghiêm trọng khi đọc file. Không thể tiếp tục.');
+                    };
+
                     if (['csv', 'txt'].includes(file.name.split('.').pop().toLowerCase())) reader.readAsText(file); else reader.readAsArrayBuffer(file);
                 } catch (err) {
                     console.error("Analysis failed:", err);
-                    showAnalysisError("Không thể bắt đầu phân tích. Vui lòng thử lại.");
-                } finally {
-                    analyzeBtn.disabled = false;
-                    analyzeBtn.innerHTML = originalBtnHTML;
+                    showAnalysisError(`Không thể bắt đầu phân tích: ${err.message}`);
                 }
             });
             
@@ -1209,7 +1274,7 @@
                 const suggestionsGroup = document.getElementById('hub-suggestions-group');
                 submitButton.disabled = true;
                 submitButton.innerHTML = `<div class="small-spinner"></div>`;
-                suggestionsGroup.querySelectorAll('button').forEach(btn => btn.disabled = true);
+                if(suggestionsGroup) suggestionsGroup.querySelectorAll('button').forEach(btn => btn.disabled = true);
 
                 const historyWithUserMsg = [...history, { role: 'user', parts: [{ text: userQuery }] }];
                 await saveData("chats", moduleId, { history: historyWithUserMsg });
@@ -1227,7 +1292,7 @@
                     isThinking = false;
                     submitButton.disabled = false;
                     submitButton.innerHTML = originalButtonHTML;
-                    suggestionsGroup.querySelectorAll('button').forEach(btn => btn.disabled = false);
+                    if(suggestionsGroup) suggestionsGroup.querySelectorAll('button').forEach(btn => btn.disabled = false);
                 }
             });
 
@@ -1267,6 +1332,7 @@
                 fileInput.value = '';
                 if(fileUploadText) fileUploadText.textContent = 'Nhấp để chọn file CSV, Excel, PDF hoặc DOCX';
                 if(analyzeBtn) analyzeBtn.disabled = true;
+                if (document.getElementById('analysisObjective')) document.getElementById('analysisObjective').value = '';
             });
         }
         
@@ -1298,17 +1364,21 @@
                     <label for="fileInput" class="file-upload-wrapper"><i class="fa-solid fa-cloud-arrow-up fa-2x"></i> <br><span id="file-upload-text">Nhấp để chọn file CSV, Excel, PDF hoặc DOCX</span></label>
                     <input type="file" id="fileInput" accept=".csv, .xlsx, .xls, .pdf, .docx, .txt" style="display: none;">
 
-                    <!-- === THAY ĐỔI: Thêm ô nhập Mục tiêu Phân tích === -->
                     <div class="setup-group" style="margin-top: 15px; text-align: left;">
                         <label for="analysisObjective" class="setup-label">Mục tiêu phân tích (Không bắt buộc):</label>
                         <textarea id="analysisObjective" 
                                   placeholder="Ví dụ: Tìm ra các sản phẩm bán chạy nhất và phân tích xu hướng doanh thu theo tháng..." 
                                   style="width: 100%; box-sizing: border-box; min-height: 70px; border-radius: 4px; border: 1px solid #cbd5e1; padding: 10px; font-size: 15px; font-family: 'Inter', sans-serif; resize: vertical;"></textarea>
                     </div>
-                    <!-- ============================================= -->
 
                     <button id="analyzeFileButton" disabled style="margin-top: 20px; width: 100%;"><span>Bắt đầu Phân tích</span></button>
                  </div>
+
+                 <div id="analysis-progress-container" class="controls-box" style="display: none; text-align: center; padding: 40px 0;">
+                    <div class="large-spinner" style="margin-bottom: 20px;"></div>
+                    <h3 id="progress-status-text" style="color: var(--sidebar-bg); margin-bottom: 10px;">Đang khởi động...</h3>
+                    <p id="progress-status-detail" style="color: #64748b;"></p>
+                </div>
 
                  <div id="analysis-hub" style="display: none;">
                     <div id="analysis-hub-header">
@@ -1352,4 +1422,3 @@
     </script>
 </body>
 </html>
-�
