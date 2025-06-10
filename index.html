@@ -199,6 +199,64 @@
         .chart-container { max-width: 100%; margin-top: 15px; }
         .speak-btn { background: none; border: none; color: #64748b; cursor: pointer; padding: 0 5px; font-size: 1rem; }
 
+        /* === THAY ĐỔI: CSS cho Tabs === */
+        .tab-navigation {
+            display: flex;
+            border-bottom: 2px solid #e2e8f0;
+            margin-bottom: 20px;
+        }
+        .tab-link {
+            padding: 10px 20px;
+            cursor: pointer;
+            background: none;
+            border: none;
+            border-bottom: 3px solid transparent;
+            font-size: 1rem;
+            font-weight: 500;
+            color: #64748b;
+            margin-bottom: -2px;
+            transition: color 0.2s, border-color 0.2s;
+        }
+        .tab-link:hover {
+            color: var(--accent-color);
+            background: none;
+        }
+        .tab-link.active {
+            color: var(--accent-color);
+            border-bottom-color: var(--accent-color);
+            font-weight: 600;
+            background: none;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        #tab-summary-content {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+        }
+        #tab-summary-content h5 {
+            margin-top: 20px;
+            margin-bottom: 10px;
+            color: var(--sidebar-bg);
+        }
+        #tab-summary-content ul {
+            list-style: none;
+            padding-left: 0;
+        }
+        #tab-summary-content li {
+            padding: 8px 0;
+            border-bottom: 1px solid #f1f5f9;
+        }
+        #tab-summary-content li:last-child {
+            border-bottom: none;
+        }
+        /* ============================ */
+
         @keyframes spin { 100% { transform: rotate(360deg); } }
     </style>
 </head>
@@ -1124,6 +1182,27 @@
                             suggestionsGroup.appendChild(wrapper);
                         });
                     }
+
+                    // === THAY ĐỔI: Render Data Summary ===
+                    const summaryContainer = document.getElementById('tab-summary');
+                    if (summaryContainer && responseObj.dataSummary) {
+                        const summary = responseObj.dataSummary;
+                        let summaryHTML = `<div id="tab-summary-content">`;
+                        summaryHTML += `<h4>Tổng quan Dữ liệu</h4>`;
+                        summaryHTML += `<p><strong>Số dòng:</strong> ${summary.rowCount ? summary.rowCount.toLocaleString('vi-VN') : 'N/A'}</p>`;
+                        summaryHTML += `<p><strong>Số cột:</strong> ${summary.columnCount || 'N/A'}</p>`;
+                        if (summary.columns && Array.isArray(summary.columns) && summary.columns.length > 0) {
+                            summaryHTML += `<h5>Các cột dữ liệu:</h5><ul>`;
+                            summary.columns.forEach(col => {
+                                summaryHTML += `<li><strong>${col.name || 'N/A'}:</strong> <em>${col.type || 'N/A'}</em></li>`;
+                            });
+                            summaryHTML += `</ul>`;
+                        }
+                        summaryHTML += `</div>`;
+                        summaryContainer.innerHTML = summaryHTML;
+                    }
+                    // ===================================
+
                 } catch(e) {
                      console.error("Error populating analysis hub:", e);
                      showAnalysisError("AI trả về dữ liệu không hợp lệ để hiển thị.");
@@ -1188,6 +1267,24 @@
                 if(fileUploadText) fileUploadText.textContent = `Đã chọn file: ${file.name}.`;
             });
             
+            // === THAY ĐỔI: Thêm sự kiện cho Tabs ===
+            const tabContainer = document.querySelector(`#${moduleId} .tab-navigation`);
+            if (tabContainer) {
+                tabContainer.addEventListener('click', (e) => {
+                    if (e.target.matches('.tab-link')) {
+                        const tabId = e.target.dataset.tab;
+                        
+                        tabContainer.querySelector('.active').classList.remove('active');
+                        e.target.classList.add('active');
+                        
+                        document.querySelectorAll(`#${moduleId} .tab-content`).forEach(content => {
+                            content.classList.toggle('active', content.id === tabId);
+                        });
+                    }
+                });
+            }
+            // =====================================
+
             analyzeBtn?.addEventListener('click', async () => {
                 const originalBtnHTML = analyzeBtn.innerHTML;
                 try {
@@ -1231,6 +1328,7 @@
 
                         updateProgress('Bước 2/4: Đã đọc file. Gửi dữ liệu đến AI...', 'Việc này có thể mất một chút thời gian...');
                         
+                        // === THAY ĐỔI: Cập nhật Prompt để yêu cầu thêm dataSummary ===
                         const initialPrompt = `You are an expert Business Analyst assistant. Your response language MUST be ${selectedLanguage}.
 Analyze the following data based on the user's objective.
 USER OBJECTIVE: "${objective || 'Provide a general analysis'}"
@@ -1238,7 +1336,7 @@ DATA:
 ---
 ${dataContext.substring(0, 100000)}
 ---
-CRITICAL INSTRUCTION: Your entire output MUST be ONLY the raw text of a single, strictly valid JSON object. Do not include \`\`\`json, any conversational text, introductions, or explanations. The JSON object is the only thing you should output. It must have these exact keys: "mainInsight" (String), "keyMetrics" (Array of {label: String, value: String}), "curatedSuggestions" (Array of {type: String, text: String}).
+CRITICAL INSTRUCTION: Your entire output MUST be ONLY the raw text of a single, strictly valid JSON object. Do not include \`\`\`json, any conversational text, introductions, or explanations. The JSON object is the only thing you should output. It must have these exact keys: "mainInsight" (String), "keyMetrics" (Array of {label: String, value: String}), "curatedSuggestions" (Array of {type: String, text: String}), "dataSummary" (an object with keys "rowCount" (Number), "columnCount" (Number), and "columns" which is an Array of Objects, each with "name" (String) and "type" (String, e.g., "Numeric", "Text", "Date")).
 The JSON response must be in the ${selectedLanguage} language.`;
                         
                         let responseText = '';
@@ -1407,10 +1505,24 @@ The JSON response must be in the ${selectedLanguage} language.`;
                         <div id="analysis-hub-key-metrics-grid" class="key-metrics-grid"></div>
                     </div>
 
-                    <div id="hub-suggestions-container">
-                        <h3>Bạn muốn khám phá điều gì tiếp theo?</h3>
-                        <div id="hub-suggestions-group" class="suggestion-button-group"></div>
+                    <!-- === THAY ĐỔI: Thêm cấu trúc Tabs === -->
+                    <div class="tab-navigation">
+                        <button class="tab-link active" data-tab="tab-overview">Tổng quan & Gợi ý</button>
+                        <button class="tab-link" data-tab="tab-summary">Tóm tắt Dữ liệu</button>
                     </div>
+
+                    <div id="tab-content-container">
+                        <div id="tab-overview" class="tab-content active">
+                            <div id="hub-suggestions-container">
+                                <h3>Bạn muốn khám phá điều gì tiếp theo?</h3>
+                                <div id="hub-suggestions-group" class="suggestion-button-group"></div>
+                            </div>
+                        </div>
+                        <div id="tab-summary" class="tab-content">
+                            <!-- Nội dung tóm tắt sẽ được render vào đây -->
+                        </div>
+                    </div>
+                    <!-- =============================== -->
 
                     <div id="analysis-content-area"></div>
 
