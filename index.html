@@ -1054,7 +1054,7 @@
                             wrapper.className = 'suggestion-button';
                             const button = document.createElement('button');
                             let icon = '❓';
-                            if (sugg.type === 'chart') icon = '📈';
+                            if (sugg.type === 'chart') icon = '�';
                             else if (sugg.type === 'deep-dive') icon = '🔬';
                             button.innerHTML = `<span>${icon}</span> ${sugg.text}`;
                             button.onclick = (e) => { if (isThinking) return; form.dispatchEvent(new CustomEvent('submit', { detail: { query: sugg.text, sourceButton: e.currentTarget } })); };
@@ -1142,6 +1142,9 @@
                     const file = fileInput.files[0];
                     if (!file) throw new Error("Không có file được chọn");
 
+                    // === LẤY MỤC TIÊU CỦA NGƯỜI DÙNG ===
+                    const objective = document.getElementById('analysisObjective').value.trim();
+
                     await saveData("chats", moduleId, { history: [], fileName: file.name, activeArchiveId: null });
                     const reader = new FileReader();
                     reader.onload = async (e) => {
@@ -1163,7 +1166,15 @@
                             await saveData("chats", moduleId, { history:[], fileName:'', activeArchiveId: null }); 
                             return; 
                         }
-                        const initialPrompt = `You are an expert Business Analyst assistant. Your response language MUST be ${selectedLanguage}. The user has uploaded the following data:\n---DATA---\n${dataContext.substring(0, 100000)}\n---END DATA---\nYour entire response MUST be a single, strictly valid, data-only JSON object, with no surrounding text, markdown, or explanations. CRITICALLY, this JSON must be 100% serializable and MUST NOT contain any JavaScript functions, comments, or any other non-standard JSON syntax. The JSON object must have the following keys: "mainInsight" (String), "keyMetrics" (Array of {label: String, value: String}), "curatedSuggestions" (Array of {type: String, text: String}). **Follow-up Response Rules (Very Important):** If a follow-up asks for a chart, respond ONLY with a strictly valid, 100% serializable Chart.js (v3+) JSON object inside <chart> tags. DO NOT include functions, comments, or any non-standard syntax. Example: <chart>{ "type": "bar", ... }</chart>. If a follow-up asks for a deep-dive, respond ONLY with a strictly valid JSON object: { "title": "...", "sections": [ { "heading": "...", "content": "..." } ] }. Otherwise, provide a concise answer in Markdown. Now, generate the initial analysis hub JSON response in ${selectedLanguage}.`;
+
+                        // === CẬP NHẬT LẠI PROMPT VỚI MỤC TIÊU ===
+                        let objectiveInstruction = '';
+                        if (objective) {
+                            objectiveInstruction = `The user's primary analysis objective is: "${objective}". Your entire analysis, including the main insight, key metrics, and suggestions, should be focused on addressing this objective first and foremost.`;
+                        }
+
+                        const initialPrompt = `You are an expert Business Analyst assistant. Your response language MUST be ${selectedLanguage}. The user has uploaded the following data:\n---DATA---\n${dataContext.substring(0, 100000)}\n---END DATA---\n${objectiveInstruction}\nYour entire response MUST be a single, strictly valid, data-only JSON object, with no surrounding text, markdown, or explanations. CRITICALLY, this JSON must be 100% serializable and MUST NOT contain any JavaScript functions, comments, or any other non-standard JSON syntax. The JSON object must have the following keys: "mainInsight" (String), "keyMetrics" (Array of {label: String, value: String}), "curatedSuggestions" (Array of {type: String, text: String}). **Follow-up Response Rules (Very Important):** If a follow-up asks for a chart, respond ONLY with a strictly valid, 100% serializable Chart.js (v3+) JSON object inside <chart> tags. DO NOT include functions, comments, or any non-standard syntax. Example: <chart>{ "type": "bar", ... }</chart>. If a follow-up asks for a deep-dive, respond ONLY with a strictly valid JSON object: { "title": "...", "sections": [ { "heading": "...", "content": "..." } ] }. Otherwise, provide a concise answer in Markdown. Now, generate the initial analysis hub JSON response in ${selectedLanguage}.`;
+                        
                         chatSession = geminiModel.startChat();
                         try {
                             const result = await chatSession.sendMessage(initialPrompt);
@@ -1286,6 +1297,16 @@
                     </div>
                     <label for="fileInput" class="file-upload-wrapper"><i class="fa-solid fa-cloud-arrow-up fa-2x"></i> <br><span id="file-upload-text">Nhấp để chọn file CSV, Excel, PDF hoặc DOCX</span></label>
                     <input type="file" id="fileInput" accept=".csv, .xlsx, .xls, .pdf, .docx, .txt" style="display: none;">
+
+                    <!-- === THAY ĐỔI: Thêm ô nhập Mục tiêu Phân tích === -->
+                    <div class="setup-group" style="margin-top: 15px; text-align: left;">
+                        <label for="analysisObjective" class="setup-label">Mục tiêu phân tích (Không bắt buộc):</label>
+                        <textarea id="analysisObjective" 
+                                  placeholder="Ví dụ: Tìm ra các sản phẩm bán chạy nhất và phân tích xu hướng doanh thu theo tháng..." 
+                                  style="width: 100%; box-sizing: border-box; min-height: 70px; border-radius: 4px; border: 1px solid #cbd5e1; padding: 10px; font-size: 15px; font-family: 'Inter', sans-serif; resize: vertical;"></textarea>
+                    </div>
+                    <!-- ============================================= -->
+
                     <button id="analyzeFileButton" disabled style="margin-top: 20px; width: 100%;"><span>Bắt đầu Phân tích</span></button>
                  </div>
 
@@ -1331,3 +1352,4 @@
     </script>
 </body>
 </html>
+�
