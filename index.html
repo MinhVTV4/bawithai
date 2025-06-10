@@ -314,6 +314,7 @@
             border-bottom: 1px solid var(--main-bg);
             padding-bottom: 15px;
             margin-bottom: 15px;
+            flex-shrink: 0; /* Prevents header from shrinking */
         }
         .modal-header h3 {
             margin: 0;
@@ -325,16 +326,23 @@
             line-height: 1;
             padding: 0 10px;
         }
-        .modal-content-container { 
+        /* UPDATED: Wrapper for scrollable content */
+        .modal-scroll-wrapper {
             overflow-y: auto;
+            flex-grow: 1;
+            min-height: 0; /* Crucial for flexbox scrolling */
+            padding-right: 15px; /* Make space for scrollbar */
+            margin-right: -15px; /* Hide the extra space if no scrollbar */
+        }
+        .modal-content-container { 
             line-height: 1.6;
-            padding-right: 10px; /* Space for scrollbar */
         }
         .modal-footer {
             padding-top: 15px;
             margin-top: 15px;
             border-top: 1px solid var(--main-bg);
             text-align: right;
+            flex-shrink: 0; /* Prevents footer from shrinking */
         }
         .modal-suggestions {
             margin-top: 20px;
@@ -367,7 +375,6 @@
             border-color: #cbd5e1;
             color: var(--accent-hover);
         }
-        /* --- NEW: Suggestion Preview Styles --- */
         .suggestion-preview {
             background-color: #f8fafc;
             border: 1px solid #e2e8f0;
@@ -472,12 +479,15 @@
                 <h3 id="modal-title">Định nghĩa chi tiết</h3>
                 <button id="modal-close-btn" class="btn-subtle">&times;</button>
             </div>
-            <div id="modal-content-container" class="modal-content-container">
-                <!-- Definition content will be injected here -->
-                <div class="large-spinner"></div>
-            </div>
-            <div id="modal-suggestions-container" class="modal-suggestions">
-                <!-- Suggestion buttons will be injected here -->
+            <!-- UPDATED: Scrollable wrapper -->
+            <div class="modal-scroll-wrapper">
+                <div id="modal-content-container" class="modal-content-container">
+                    <!-- Definition content will be injected here -->
+                    <div class="large-spinner"></div>
+                </div>
+                <div id="modal-suggestions-container" class="modal-suggestions">
+                    <!-- Suggestion buttons will be injected here -->
+                </div>
             </div>
             <div class="modal-footer">
                 <button id="save-to-notebook-btn" title="Lưu vào Sổ tay"><i class="fa-solid fa-floppy-disk"></i>&nbsp;Lưu vào Sổ tay</button>
