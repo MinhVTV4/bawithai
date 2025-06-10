@@ -65,7 +65,8 @@
         
         #center-panel { flex-grow: 1; display: flex; flex-direction: column; overflow-y: auto; }
         #main-content { flex-grow: 1; padding: 30px; width: 100%; }
-        #right-panel { width: 300px; flex-shrink: 0; background-color: #ffffff; border-left: 1px solid #e2e8f0; display: flex; flex-direction: column; height: 100vh; }
+        /* === THAY ĐỔI: Thu hẹp thanh bên phải === */
+        #right-panel { width: 280px; flex-shrink: 0; background-color: #ffffff; border-left: 1px solid #e2e8f0; display: flex; flex-direction: column; height: 100vh; }
         
         .module-content { display: none; }
         .module-content.active { display: block; }
@@ -81,7 +82,7 @@
         }
 
         .header-actions {
-            margin-left: auto;
+            /* === THAY ĐỔI: Bỏ margin-left: auto === */
             display: flex;
             gap: 10px;
         }
@@ -1074,7 +1075,6 @@
 
             function renderChart(canvasElement, chartData) {
                 if (!canvasElement) return;
-                // SỬA LỖI: Kiểm tra Chart.js đã tải xong chưa
                 if (typeof Chart === 'undefined') {
                     console.error("Chart.js has not been loaded yet.");
                     canvasElement.parentElement.innerHTML += '<p style="color: var(--danger-color);">Lỗi: Không thể tải thư viện biểu đồ. Vui lòng thử làm mới trang.</p>';
@@ -1482,7 +1482,7 @@ The JSON response must be in the ${selectedLanguage} language.`;
                     }
                 }
 
-                markdownContent += `## 💬 Lịch sử Hỏi & Đáp\n\n`;
+                markdownContent += `## � Lịch sử Hỏi & Đáp\n\n`;
 
                 history.forEach(msg => {
                     if (msg.role === 'user' && msg.parts[0].text.includes('You are an expert Business Analyst assistant')) {
@@ -1680,3 +1680,4 @@ The JSON response must be in the ${selectedLanguage} language.`;
     </script>
 </body>
 </html>
+�
