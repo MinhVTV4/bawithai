@@ -65,7 +65,6 @@
         
         #center-panel { flex-grow: 1; display: flex; flex-direction: column; overflow-y: auto; }
         #main-content { flex-grow: 1; padding: 30px; width: 100%; }
-        /* === THAY ĐỔI: Thu hẹp thanh bên phải === */
         #right-panel { width: 280px; flex-shrink: 0; background-color: #ffffff; border-left: 1px solid #e2e8f0; display: flex; flex-direction: column; height: 100vh; }
         
         .module-content { display: none; }
@@ -82,7 +81,6 @@
         }
 
         .header-actions {
-            /* === THAY ĐỔI: Bỏ margin-left: auto === */
             display: flex;
             gap: 10px;
         }
@@ -1334,7 +1332,6 @@
             }
 
             analyzeBtn?.addEventListener('click', async () => {
-                const originalBtnHTML = analyzeBtn.innerHTML;
                 try {
                     if (!fileInput.files[0]) {
                         throw new Error("Vui lòng chọn một file để phân tích.");
@@ -1343,6 +1340,7 @@
                     analyzeBtn.disabled = true;
                     analyzeBtn.innerHTML = `<span><div class="small-spinner"></div> Đang xử lý...</span>`;
 
+                    // SỬA LỖI: Chuyển đổi giao diện ngay lập tức
                     uploadSection.style.display = 'none';
                     progressContainer.style.display = 'block';
                     updateProgress('Bước 1/4: Đang xử lý file...');
@@ -1365,12 +1363,10 @@
                             else if (fileExtension === 'docx') { const res = await mammoth.extractRawText({arrayBuffer: fileContent}); dataContext = res.value; }
                         } catch (err) { 
                             showAnalysisError(`Lỗi khi đọc file: ${err.message}`); 
-                            await saveData("chats", moduleId, { history:[], fileName:'', activeArchiveId: null }); 
                             return; 
                         }
                         if (!dataContext) { 
                             showAnalysisError("Không thể đọc file hoặc định dạng không được hỗ trợ."); 
-                            await saveData("chats", moduleId, { history:[], fileName:'', activeArchiveId: null }); 
                             return; 
                         }
 
@@ -1405,7 +1401,6 @@ The JSON response must be in the ${selectedLanguage} language.`;
                         } catch (err) { 
                             console.error("Error initial analysis:", err, "Raw AI response:", responseText);
                             showAnalysisError("AI trả về phản hồi không hợp lệ. Vui lòng thử lại."); 
-                            await saveData("chats", moduleId, { history:[], fileName:'', activeArchiveId: null }); 
                         }
                     };
 
@@ -1482,7 +1477,7 @@ The JSON response must be in the ${selectedLanguage} language.`;
                     }
                 }
 
-                markdownContent += `## � Lịch sử Hỏi & Đáp\n\n`;
+                markdownContent += `## 💬 Lịch sử Hỏi & Đáp\n\n`;
 
                 history.forEach(msg => {
                     if (msg.role === 'user' && msg.parts[0].text.includes('You are an expert Business Analyst assistant')) {
@@ -1568,6 +1563,7 @@ The JSON response must be in the ${selectedLanguage} language.`;
                 const analyzeBtn = document.getElementById('analyzeFileButton');
                 if(analyzeBtn) {
                     analyzeBtn.disabled = true;
+                    // SỬA LỖI: Reset lại text của nút
                     analyzeBtn.innerHTML = '<span>Bắt đầu Phân tích</span>';
                 }
 
@@ -1680,4 +1676,3 @@ The JSON response must be in the ${selectedLanguage} language.`;
     </script>
 </body>
 </html>
-�
