@@ -336,7 +336,6 @@
             border-top: 1px solid var(--main-bg);
             text-align: right;
         }
-        /* --- NEW: Suggestion Styles in Modal --- */
         .modal-suggestions {
             margin-top: 20px;
             padding-top: 15px;
@@ -368,7 +367,23 @@
             border-color: #cbd5e1;
             color: var(--accent-hover);
         }
-
+        /* --- NEW: Suggestion Preview Styles --- */
+        .suggestion-preview {
+            background-color: #f8fafc;
+            border: 1px solid #e2e8f0;
+            padding: 15px;
+            margin-top: 10px;
+            border-radius: 8px;
+            font-size: 0.95rem;
+        }
+        .suggestion-preview-footer {
+            text-align: right;
+            margin-top: 10px;
+        }
+        .suggestion-preview-footer button {
+            font-size: 0.875rem;
+            padding: 6px 12px;
+        }
 
         @keyframes spin { 100% { transform: rotate(360deg); } }
     </style>
@@ -461,7 +476,6 @@
                 <!-- Definition content will be injected here -->
                 <div class="large-spinner"></div>
             </div>
-            <!-- NEW: Suggestions container -->
             <div id="modal-suggestions-container" class="modal-suggestions">
                 <!-- Suggestion buttons will be injected here -->
             </div>
@@ -785,7 +799,7 @@
         }
         
         // =====================================================================
-        // === BA LEARNING ROOM - UPDATED WITH SUGGESTIONS =======================
+        // === BA LEARNING ROOM - UPDATED WITH OPTIMIZED SUGGESTIONS ===========
         // =====================================================================
         function setupLearningRoom() {
             const moduleId = 'learning-room';
@@ -798,7 +812,7 @@
             const modal = document.getElementById('term-modal');
             const modalTitle = document.getElementById('modal-title');
             const modalContentContainer = document.getElementById('modal-content-container');
-            const modalSuggestionsContainer = document.getElementById('modal-suggestions-container'); // NEW
+            const modalSuggestionsContainer = document.getElementById('modal-suggestions-container');
             const modalCloseBtn = document.getElementById('modal-close-btn');
             const saveToNotebookBtn = document.getElementById('save-to-notebook-btn');
 
@@ -864,7 +878,6 @@ CRITICAL INSTRUCTION: Whenever you mention a specific Business Analytics term, a
             
             form.addEventListener('submit', async e => {
                 e.preventDefault();
-                // If triggered by suggestion, the query is in the detail
                 const userQuery = e.detail?.query || input.value.trim();
                 if (!userQuery || !geminiModel || isThinking) return;
                 
@@ -918,7 +931,6 @@ CRITICAL INSTRUCTION: Whenever you mention a specific Business Analytics term, a
                     modalTitle.textContent = `Giải thích: "${term}"`;
                     modal.style.display = 'flex';
 
-                    // NEW: Updated prompt to ask for suggestions
                     const definitionPrompt = `Hãy giải thích chi tiết về thuật ngữ "${term}". Cung cấp định nghĩa, một ví dụ cụ thể, và tầm quan trọng của nó trong ngành Business Analytics.
 Sau khi giải thích xong, hãy thêm một phần có tiêu đề "GỢI Ý KHÁM PHÁ:" và liệt kê 2-3 chủ đề hoặc câu hỏi liên quan, mỗi mục trên một dòng và bắt đầu bằng dấu "-".
 Trả lời bằng tiếng Việt.`;
@@ -939,7 +951,7 @@ Trả lời bằng tiếng Việt.`;
                         }
 
                         termToSave = term;
-                        definitionToSave = definitionPart.trim(); // Save only the definition part
+                        definitionToSave = definitionPart.trim();
 
                         if (window.marked) {
                             modalContentContainer.innerHTML = window.marked.parse(definitionPart);
@@ -947,7 +959,6 @@ Trả lời bằng tiếng Việt.`;
                             modalContentContainer.textContent = definitionPart;
                         }
 
-                        // Render suggestions
                         if (suggestionsPart) {
                             const suggestionsHeader = document.createElement('h4');
                             suggestionsHeader.textContent = 'Gợi ý Khám phá';
@@ -997,14 +1008,66 @@ Trả lời bằng tiếng Việt.`;
                 saveToNotebookBtn.innerHTML = '<i class="fa-solid fa-check"></i>&nbsp;Đã lưu!';
             });
 
-            // NEW: Event listener for suggestion buttons inside the modal
-            modalSuggestionsContainer.addEventListener('click', (e) => {
+            // UPDATED: Logic for suggestion buttons inside the modal for previewing
+            modalSuggestionsContainer.addEventListener('click', async (e) => {
                 const button = e.target.closest('.suggestion-item-btn');
-                if (button) {
+                if (button && !button.disabled) {
+                    // Prevent multiple clicks
+                    button.disabled = true;
+
+                    // Remove any existing preview
+                    const existingPreview = button.parentElement.querySelector('.suggestion-preview');
+                    if (existingPreview) existingPreview.remove();
+                    
+                    const originalButtonHTML = button.innerHTML;
+                    button.innerHTML = `<div class="small-spinner"></div>&nbsp;Đang tìm hiểu...`;
+
                     const suggestionText = button.dataset.suggestion;
-                    modal.style.display = 'none'; // Close modal
-                    input.value = suggestionText; // Put suggestion in main input
-                    form.dispatchEvent(new CustomEvent('submit', { detail: { query: suggestionText } })); // Submit form
+                    
+                    try {
+                        const result = await geminiModel.generateContent(`Giải thích ngắn gọn về: "${suggestionText}"`);
+                        const previewText = await result.response.text();
+                        
+                        const previewContainer = document.createElement('div');
+                        previewContainer.className = 'suggestion-preview';
+                        
+                        if (window.marked) {
+                            previewContainer.innerHTML = window.marked.parse(previewText);
+                        } else {
+                            previewContainer.textContent = previewText;
+                        }
+
+                        const footer = document.createElement('div');
+                        footer.className = 'suggestion-preview-footer';
+                        
+                        const addToChatBtn = document.createElement('button');
+                        addToChatBtn.innerHTML = '<i class="fa-solid fa-plus"></i>&nbsp;Thêm vào cuộc trò chuyện';
+                        addToChatBtn.onclick = async () => {
+                            const newHistory = [
+                                ...history,
+                                { role: 'user', parts: [{ text: suggestionText }] },
+                                { role: 'model', parts: [{ text: previewText }] }
+                            ];
+                            await saveData("chats", moduleId, { history: newHistory });
+                            modal.style.display = 'none';
+                        };
+                        footer.appendChild(addToChatBtn);
+                        previewContainer.appendChild(footer);
+                        
+                        // Insert the preview right after the button
+                        button.after(previewContainer);
+
+                    } catch (error) {
+                        console.error("Error fetching suggestion preview:", error);
+                        const errorDiv = document.createElement('div');
+                        errorDiv.className = 'suggestion-preview';
+                        errorDiv.innerHTML = `<p style="color: var(--danger-color);">Không thể tải gợi ý.</p>`;
+                        button.after(errorDiv);
+                    } finally {
+                        // Restore button state
+                        button.disabled = false;
+                        button.innerHTML = originalButtonHTML;
+                    }
                 }
             });
         }
@@ -1173,7 +1236,7 @@ Trả lời bằng tiếng Việt.`;
                 try {
                     const result = await chatSession.sendMessage(userResponse);
                     const fullResponseText = await result.response.text();
-                    const finalHistory = [...historyWithUserMsg, { role: 'model', parts: [{ text: fullResponseText }] }];
+                    const finalHistory = [...historyWithUserMsg, { role: 'model', parts: [{ text: fullResponseText }] } ];
                     await saveData("chats", moduleId, { history: finalHistory });
                     speakText(fullResponseText, sessionState.language);
                 } catch (error) {
@@ -1938,4 +2001,4 @@ The JSON response must be in the ${selectedLanguage} language.`;
         }
     </script>
 </body>
-</ht
+</html>
