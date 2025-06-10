@@ -621,7 +621,6 @@
                         const sender = msg.role === 'user' ? 'user' : 'ai';
                         const messageDiv = document.createElement('div');
                         messageDiv.className = `chat-message ${sender}-message`;
-                        // SỬA LỖI: Kiểm tra window.marked trước khi dùng
                         if (window.marked) {
                             messageDiv.innerHTML = window.marked.parse(msg.parts[0].text);
                         } else {
@@ -632,7 +631,6 @@
                 } else {
                      const aiMsgContainer = document.createElement('div');
                      aiMsgContainer.className = 'chat-message ai-message';
-                     // SỬA LỖI: Kiểm tra window.marked trước khi dùng
                      const welcomeText = "Xin chào! Tôi là trợ lý học tập BA của bạn. Bạn muốn hỏi về chủ đề gì hôm nay?";
                      if (window.marked) {
                         aiMsgContainer.innerHTML = window.marked.parse(welcomeText);
@@ -759,7 +757,6 @@
                         const senderClass = msg.role === 'user' ? 'user-message' : 'ai-message';
                         const messageDiv = document.createElement('div');
                         messageDiv.className = `chat-message ${senderClass}`;
-                        // SỬA LỖI: Kiểm tra window.marked trước khi dùng
                         if (window.marked) {
                             messageDiv.innerHTML = window.marked.parse(msg.parts[0].text);
                         } else {
@@ -949,17 +946,25 @@
             langGroup.addEventListener('click', (e) => { if(e.target.classList.contains('language-btn')){langGroup.querySelector('.selected')?.classList.remove('selected'); e.target.classList.add('selected'); selectedLanguage = e.target.dataset.lang;} });
             
             function showAnalysisError(message) {
-                const mainInsightContainer = document.querySelector('#analysis-hub .main-insight-card-container');
+                 const analyzeBtn = document.getElementById('analyzeFileButton');
+                 if(analyzeBtn) {
+                    analyzeBtn.disabled = fileInput.files.length === 0;
+                    analyzeBtn.innerHTML = `<span>Bắt đầu Phân tích</span>`;
+                 }
+
                 if (progressContainer.style.display !== 'none') {
                      updateProgress('Lỗi Phân Tích!', message);
                      setTimeout(() => {
                         progressContainer.style.display = 'none';
                         uploadSection.style.display = 'block';
                      }, 3000);
-                } else if(mainInsightContainer) {
-                    mainInsightContainer.innerHTML = `<div class="error-card"><i class="fa-solid fa-triangle-exclamation"></i><p>${message}</p></div>`;
-                    document.getElementById('analysis-hub-key-metrics-grid').innerHTML = '';
-                    document.getElementById('hub-suggestions-group').innerHTML = '';
+                } else {
+                    const mainInsightContainer = document.querySelector('#analysis-hub .main-insight-card-container');
+                    if(mainInsightContainer) {
+                        mainInsightContainer.innerHTML = `<div class="error-card"><i class="fa-solid fa-triangle-exclamation"></i><p>${message}</p></div>`;
+                        document.getElementById('analysis-hub-key-metrics-grid').innerHTML = '';
+                        document.getElementById('hub-suggestions-group').innerHTML = '';
+                    }
                 }
             }
 
@@ -1184,14 +1189,21 @@
             });
             
             analyzeBtn?.addEventListener('click', async () => {
-                uploadSection.style.display = 'none';
-                progressContainer.style.display = 'block';
-                updateProgress('Bước 1/4: Đang xử lý file...');
-
+                const originalBtnHTML = analyzeBtn.innerHTML;
                 try {
+                    if (!fileInput.files[0]) {
+                        throw new Error("Vui lòng chọn một file để phân tích.");
+                    }
+                    
+                    analyzeBtn.disabled = true;
+                    analyzeBtn.innerHTML = `<span><div class="small-spinner"></div> Đang xử lý...</span>`;
+
+                    uploadSection.style.display = 'none';
+                    progressContainer.style.display = 'block';
+                    updateProgress('Bước 1/4: Đang xử lý file...');
+
                     await archiveCurrentSession(moduleId);
                     const file = fileInput.files[0];
-                    if (!file) throw new Error("Không có file được chọn");
 
                     const objective = document.getElementById('analysisObjective').value.trim();
 
