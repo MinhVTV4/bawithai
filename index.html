@@ -65,7 +65,7 @@
         
         #center-panel { flex-grow: 1; display: flex; flex-direction: column; overflow-y: auto; }
         #main-content { flex-grow: 1; padding: 30px; width: 100%; }
-        #right-panel { width: 350px; flex-shrink: 0; background-color: #ffffff; border-left: 1px solid #e2e8f0; display: flex; flex-direction: column; height: 100vh; }
+        #right-panel { width: 300px; flex-shrink: 0; background-color: #ffffff; border-left: 1px solid #e2e8f0; display: flex; flex-direction: column; height: 100vh; }
         
         .module-content { display: none; }
         .module-content.active { display: block; }
@@ -108,7 +108,6 @@
         .btn-group button { background-color: var(--btn-secondary-bg); color: var(--text-dark); }
         .btn-group button.selected { background-color: var(--accent-color); color: white; }
         
-        /* Right Panel Sections */
         .right-panel-section { border-bottom: 1px solid #e2e8f0; }
         .right-panel-header { padding: 20px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
         .right-panel-header h3 { margin: 0; font-size: 1.25rem; color: var(--sidebar-bg); flex-grow: 1;}
@@ -325,7 +324,6 @@
                     </div>
                 </div>
             </div>
-            <!-- NEW FEATURE: Bookmarked Prompts -->
             <div id="bookmarked-prompts-container" class="right-panel-section collapsed">
                 <div class="right-panel-header" id="bookmarked-prompts-header">
                     <h3>💡 Gợi ý đã lưu</h3>
@@ -1076,6 +1074,12 @@
 
             function renderChart(canvasElement, chartData) {
                 if (!canvasElement) return;
+                // SỬA LỖI: Kiểm tra Chart.js đã tải xong chưa
+                if (typeof Chart === 'undefined') {
+                    console.error("Chart.js has not been loaded yet.");
+                    canvasElement.parentElement.innerHTML += '<p style="color: var(--danger-color);">Lỗi: Không thể tải thư viện biểu đồ. Vui lòng thử làm mới trang.</p>';
+                    return;
+                }
                 const chartConfig = JSON.parse(JSON.stringify(chartData));
 
                 if (chartConfig.type === 'horizontalBar') {
@@ -1250,7 +1254,6 @@
                 const data = docSnapshot.data();
                 const sessionExists = data && data.history && data.history.length > 0;
                 
-                // === THAY ĐỔI: Cập nhật nút dựa vào ngữ cảnh ===
                 currentArchiveId = (data && data.activeArchiveId) ? data.activeArchiveId : null;
                 const clearBtnIcon = clearBtn.querySelector('i');
                 if (currentArchiveId) {
@@ -1260,8 +1263,7 @@
                     clearBtn.title = 'Lưu trữ phiên & Bắt đầu lại';
                     if (clearBtnIcon) clearBtnIcon.className = 'fa-solid fa-floppy-disk';
                 }
-                // ============================================
-
+                
                 currentFileName = data?.fileName || '';
                 history = getValidHistoryForChat(sessionExists ? data.history : []);
                 if (geminiModel) chatSession = geminiModel.startChat({ history });
