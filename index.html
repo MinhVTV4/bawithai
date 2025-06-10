@@ -199,7 +199,6 @@
         .chart-container { max-width: 100%; margin-top: 15px; }
         .speak-btn { background: none; border: none; color: #64748b; cursor: pointer; padding: 0 5px; font-size: 1rem; }
 
-        /* === THAY ĐỔI: CSS cho Tabs === */
         .tab-navigation {
             display: flex;
             border-bottom: 2px solid #e2e8f0;
@@ -233,11 +232,12 @@
         .tab-content.active {
             display: block;
         }
-        #tab-summary-content {
+        #tab-summary-content, .suggested-chart-card {
             background-color: #fff;
             padding: 20px;
             border-radius: 8px;
             box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+            margin-bottom: 20px;
         }
         #tab-summary-content h5 {
             margin-top: 20px;
@@ -255,7 +255,12 @@
         #tab-summary-content li:last-child {
             border-bottom: none;
         }
-        /* ============================ */
+        
+        .suggested-chart-card h5 {
+             margin-top: 0;
+             margin-bottom: 15px;
+             color: var(--sidebar-bg);
+        }
 
         @keyframes spin { 100% { transform: rotate(360deg); } }
     </style>
@@ -316,7 +321,7 @@
             <!-- NEW FEATURE: Bookmarked Prompts -->
             <div id="bookmarked-prompts-container" class="right-panel-section collapsed">
                 <div class="right-panel-header" id="bookmarked-prompts-header">
-                    <h3>💡 Gợi ý đã lưu</h3>
+                    <h3>� Gợi ý đã lưu</h3>
                     <button class="btn-subtle toggle-icon"><i class="fa-solid fa-chevron-down"></i></button>
                 </div>
                 <div class="right-panel-content">
@@ -1183,7 +1188,6 @@
                         });
                     }
 
-                    // === THAY ĐỔI: Render Data Summary ===
                     const summaryContainer = document.getElementById('tab-summary');
                     if (summaryContainer && responseObj.dataSummary) {
                         const summary = responseObj.dataSummary;
@@ -1200,6 +1204,30 @@
                         }
                         summaryHTML += `</div>`;
                         summaryContainer.innerHTML = summaryHTML;
+                    }
+
+                    // === THAY ĐỔI: Render Biểu đồ gợi ý ===
+                    const chartsContainer = document.getElementById('tab-charts');
+                    if (chartsContainer) {
+                        chartsContainer.innerHTML = ''; // Clear previous charts
+                        if (responseObj.suggestedCharts && Array.isArray(responseObj.suggestedCharts) && responseObj.suggestedCharts.length > 0) {
+                            responseObj.suggestedCharts.forEach((chartConfig, index) => {
+                                const chartCard = document.createElement('div');
+                                chartCard.className = 'suggested-chart-card';
+                                
+                                const chartTitle = document.createElement('h5');
+                                chartTitle.textContent = chartConfig.options?.plugins?.title?.text || `Biểu đồ gợi ý ${index + 1}`;
+                                chartCard.appendChild(chartTitle);
+
+                                const canvas = document.createElement('canvas');
+                                chartCard.appendChild(canvas);
+                                
+                                chartsContainer.appendChild(chartCard);
+                                renderChart(canvas, chartConfig);
+                            });
+                        } else {
+                            chartsContainer.innerHTML = `<p style="text-align: center; color: #64748b; padding: 20px;">AI không tìm thấy biểu đồ nào phù hợp để gợi ý tự động.</p>`;
+                        }
                     }
                     // ===================================
 
@@ -1267,7 +1295,6 @@
                 if(fileUploadText) fileUploadText.textContent = `Đã chọn file: ${file.name}.`;
             });
             
-            // === THAY ĐỔI: Thêm sự kiện cho Tabs ===
             const tabContainer = document.querySelector(`#${moduleId} .tab-navigation`);
             if (tabContainer) {
                 tabContainer.addEventListener('click', (e) => {
@@ -1283,7 +1310,6 @@
                     }
                 });
             }
-            // =====================================
 
             analyzeBtn?.addEventListener('click', async () => {
                 const originalBtnHTML = analyzeBtn.innerHTML;
@@ -1328,7 +1354,7 @@
 
                         updateProgress('Bước 2/4: Đã đọc file. Gửi dữ liệu đến AI...', 'Việc này có thể mất một chút thời gian...');
                         
-                        // === THAY ĐỔI: Cập nhật Prompt để yêu cầu thêm dataSummary ===
+                        // === THAY ĐỔI: Cập nhật Prompt để yêu cầu thêm suggestedCharts ===
                         const initialPrompt = `You are an expert Business Analyst assistant. Your response language MUST be ${selectedLanguage}.
 Analyze the following data based on the user's objective.
 USER OBJECTIVE: "${objective || 'Provide a general analysis'}"
@@ -1336,7 +1362,7 @@ DATA:
 ---
 ${dataContext.substring(0, 100000)}
 ---
-CRITICAL INSTRUCTION: Your entire output MUST be ONLY the raw text of a single, strictly valid JSON object. Do not include \`\`\`json, any conversational text, introductions, or explanations. The JSON object is the only thing you should output. It must have these exact keys: "mainInsight" (String), "keyMetrics" (Array of {label: String, value: String}), "curatedSuggestions" (Array of {type: String, text: String}), "dataSummary" (an object with keys "rowCount" (Number), "columnCount" (Number), and "columns" which is an Array of Objects, each with "name" (String) and "type" (String, e.g., "Numeric", "Text", "Date")).
+CRITICAL INSTRUCTION: Your entire output MUST be ONLY the raw text of a single, strictly valid JSON object. Do not include \`\`\`json, any conversational text, introductions, or explanations. The JSON object is the only thing you should output. It must have these exact keys: "mainInsight" (String), "keyMetrics" (Array of {label: String, value: String}), "curatedSuggestions" (Array of {type: String, text: String}), "dataSummary" (an object with keys "rowCount" (Number), "columnCount" (Number), and "columns" which is an Array of Objects, each with "name" (String) and "type" (String, e.g., "Numeric", "Text", "Date")), and "suggestedCharts" (an Array of 1 to 2 valid, 100% serializable Chart.js (v3+) JSON chart configurations that are most relevant to the data. Do NOT include any functions or non-serializable elements).
 The JSON response must be in the ${selectedLanguage} language.`;
                         
                         let responseText = '';
@@ -1505,10 +1531,10 @@ The JSON response must be in the ${selectedLanguage} language.`;
                         <div id="analysis-hub-key-metrics-grid" class="key-metrics-grid"></div>
                     </div>
 
-                    <!-- === THAY ĐỔI: Thêm cấu trúc Tabs === -->
                     <div class="tab-navigation">
                         <button class="tab-link active" data-tab="tab-overview">Tổng quan & Gợi ý</button>
                         <button class="tab-link" data-tab="tab-summary">Tóm tắt Dữ liệu</button>
+                        <button class="tab-link" data-tab="tab-charts">Biểu đồ Gợi ý</button>
                     </div>
 
                     <div id="tab-content-container">
@@ -1521,8 +1547,10 @@ The JSON response must be in the ${selectedLanguage} language.`;
                         <div id="tab-summary" class="tab-content">
                             <!-- Nội dung tóm tắt sẽ được render vào đây -->
                         </div>
+                        <div id="tab-charts" class="tab-content">
+                            <!-- Biểu đồ gợi ý sẽ được render vào đây -->
+                        </div>
                     </div>
-                    <!-- =============================== -->
 
                     <div id="analysis-content-area"></div>
 
@@ -1549,4 +1577,4 @@ The JSON response must be in the ${selectedLanguage} language.`;
         }
     </script>
 </body>
-</html>
+</ht�
