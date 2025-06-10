@@ -321,7 +321,7 @@
             <!-- NEW FEATURE: Bookmarked Prompts -->
             <div id="bookmarked-prompts-container" class="right-panel-section collapsed">
                 <div class="right-panel-header" id="bookmarked-prompts-header">
-                    <h3>� Gợi ý đã lưu</h3>
+                    <h3>💡 Gợi ý đã lưu</h3>
                     <button class="btn-subtle toggle-icon"><i class="fa-solid fa-chevron-down"></i></button>
                 </div>
                 <div class="right-panel-content">
@@ -1206,7 +1206,6 @@
                         summaryContainer.innerHTML = summaryHTML;
                     }
 
-                    // === THAY ĐỔI: Render Biểu đồ gợi ý ===
                     const chartsContainer = document.getElementById('tab-charts');
                     if (chartsContainer) {
                         chartsContainer.innerHTML = ''; // Clear previous charts
@@ -1229,7 +1228,6 @@
                             chartsContainer.innerHTML = `<p style="text-align: center; color: #64748b; padding: 20px;">AI không tìm thấy biểu đồ nào phù hợp để gợi ý tự động.</p>`;
                         }
                     }
-                    // ===================================
 
                 } catch(e) {
                      console.error("Error populating analysis hub:", e);
@@ -1354,7 +1352,6 @@
 
                         updateProgress('Bước 2/4: Đã đọc file. Gửi dữ liệu đến AI...', 'Việc này có thể mất một chút thời gian...');
                         
-                        // === THAY ĐỔI: Cập nhật Prompt để yêu cầu thêm suggestedCharts ===
                         const initialPrompt = `You are an expert Business Analyst assistant. Your response language MUST be ${selectedLanguage}.
 Analyze the following data based on the user's objective.
 USER OBJECTIVE: "${objective || 'Provide a general analysis'}"
@@ -1471,7 +1468,13 @@ The JSON response must be in the ${selectedLanguage} language.`;
                 await saveData("chats", moduleId, { history: [], fileName: '', activeArchiveId: null });
                 fileInput.value = '';
                 if(fileUploadText) fileUploadText.textContent = 'Nhấp để chọn file CSV, Excel, PDF hoặc DOCX';
-                if(analyzeBtn) analyzeBtn.disabled = true;
+                
+                const analyzeBtn = document.getElementById('analyzeFileButton');
+                if(analyzeBtn) {
+                    analyzeBtn.disabled = true;
+                    analyzeBtn.innerHTML = '<span>Bắt đầu Phân tích</span>';
+                }
+
                 if (document.getElementById('analysisObjective')) document.getElementById('analysisObjective').value = '';
             });
         }
@@ -1577,4 +1580,4 @@ The JSON response must be in the ${selectedLanguage} language.`;
         }
     </script>
 </body>
-</ht�
+</html>
