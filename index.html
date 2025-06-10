@@ -147,7 +147,6 @@
             transition: color 0.3s ease; 
         }
 
-
         #session-history-list, #bookmarked-prompts-list { max-height: 300px; overflow-y: auto; }
         .history-item, .bookmark-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 8px; border-bottom: 1px solid #f1f5f9; cursor: pointer; border-radius: 4px; }
         .history-item:hover, .bookmark-item:hover { background-color: #f8fafc; }
@@ -196,7 +195,6 @@
         .suggestion-button > button { flex-grow: 1; justify-content: flex-start; background-color: #fff; color: var(--text-dark); border: 1px solid #e2e8f0; }
         .suggestion-button > button:hover { background-color: #f1f5f9; }
         .suggestion-button > .bookmark-btn { flex-shrink: 0; margin-left: 10px; }
-
         
         #analysis-content-area { margin-top: 25px; display: flex; flex-direction: column; gap: 20px; }
         .content-card { background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.05); }
@@ -266,6 +264,72 @@
              margin-bottom: 15px;
              color: var(--sidebar-bg);
         }
+
+        /* --- NEW: Term Link Styles --- */
+        .term-link {
+            background-color: var(--highlight-bg);
+            color: var(--accent-color);
+            border: none;
+            padding: 2px 6px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+            font-family: inherit;
+            font-size: inherit;
+            transition: background-color 0.2s;
+            border-bottom: 2px solid var(--highlight-border);
+        }
+        .term-link:hover {
+            background-color: #fef3c7;
+        }
+
+        /* --- NEW: Modal Styles --- */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background-color: rgba(30, 41, 59, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .modal-box {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            width: 90%;
+            max-width: 600px;
+            max-height: 80vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--main-bg);
+            padding-bottom: 15px;
+            margin-bottom: 15px;
+        }
+        .modal-header h3 {
+            margin: 0;
+            font-size: 1.5rem;
+            color: var(--sidebar-bg);
+        }
+        #modal-close-btn {
+            font-size: 2rem;
+            line-height: 1;
+            padding: 0 10px;
+        }
+        .modal-content-container { /* Renamed for clarity */
+            overflow-y: auto;
+            line-height: 1.6;
+        }
+
 
         @keyframes spin { 100% { transform: rotate(360deg); } }
     </style>
@@ -346,6 +410,21 @@
             </div>
         </aside>
     </div>
+
+    <!-- NEW: Modal for Term Definitions -->
+    <div id="term-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3 id="modal-title">Định nghĩa chi tiết</h3>
+                <button id="modal-close-btn" class="btn-subtle">&times;</button>
+            </div>
+            <div id="modal-content-container" class="modal-content-container">
+                <!-- Nội dung định nghĩa của AI sẽ được chèn vào đây -->
+                <div class="large-spinner"></div>
+            </div>
+        </div>
+    </div>
+
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.0/firebase-app.js";
@@ -659,21 +738,46 @@
             }
         }
         
+        // =====================================================================
+        // === BA LEARNING ROOM - UPDATED WITH INTERACTIVE TERMS =================
+        // =====================================================================
         function setupLearningRoom() {
             const moduleId = 'learning-room';
             const historyEl = document.getElementById(`${moduleId}-chat-history`);
             const form = document.getElementById(`${moduleId}-chat-form`);
             const input = document.getElementById(`${moduleId}-chat-input`);
             const clearBtn = document.getElementById(`clear-${moduleId}-history`);
-            if(!historyEl || !form || !input || !clearBtn) return;
+            
+            // NEW: Modal elements
+            const modal = document.getElementById('term-modal');
+            const modalTitle = document.getElementById('modal-title');
+            const modalContentContainer = document.getElementById('modal-content-container');
+            const modalCloseBtn = document.getElementById('modal-close-btn');
+
+            if(!historyEl || !form || !input || !clearBtn || !modal) return;
             
             let history = [];
             let chatSession = null;
             let isThinking = false;
+            
+            // NEW: Updated system instruction
             const systemInstruction = {
                 role: "system",
-                parts: [{ text: "You are a helpful assistant for Business Analytics students. All your responses must be in Vietnamese."}]
+                parts: [{ text: `You are a helpful assistant for Business Analytics students. All your responses must be in Vietnamese.
+CRITICAL INSTRUCTION: Whenever you mention a specific Business Analytics term, a technical keyword, or an important concept, you MUST wrap it in custom XML tags like this: <term>A/B Testing</term>. This is a strict requirement for your output.`}]
             };
+
+            // NEW: Helper function to render interactive terms
+            function renderInteractiveTerms(responseText) {
+                if (!responseText) return '';
+                const processedText = responseText.replace(/<term>(.*?)<\/term>/g, (match, term) => {
+                    return `<button class="term-link" data-term="${term.trim()}">${term.trim()}</button>`;
+                });
+                if (window.marked) {
+                    return window.marked.parse(processedText);
+                }
+                return processedText;
+            }
 
             const unsub = onSnapshot(doc(db, "users", currentUser.uid, "chats", moduleId), (doc) => {
                 isThinking = false;
@@ -688,22 +792,26 @@
                         const sender = msg.role === 'user' ? 'user' : 'ai';
                         const messageDiv = document.createElement('div');
                         messageDiv.className = `chat-message ${sender}-message`;
-                        if (window.marked) {
+                        
+                        // UPDATED: Use the new render function for AI messages
+                        if (sender === 'ai') {
+                             messageDiv.innerHTML = renderInteractiveTerms(msg.parts[0].text);
+                        } else if (window.marked) {
                             messageDiv.innerHTML = window.marked.parse(msg.parts[0].text);
                         } else {
                             messageDiv.textContent = msg.parts[0].text;
                         }
+
                         if(historyEl) historyEl.appendChild(messageDiv);
                     });
                 } else {
                      const aiMsgContainer = document.createElement('div');
                      aiMsgContainer.className = 'chat-message ai-message';
-                     const welcomeText = "Xin chào! Tôi là trợ lý học tập BA của bạn. Bạn muốn hỏi về chủ đề gì hôm nay?";
-                     if (window.marked) {
-                        aiMsgContainer.innerHTML = window.marked.parse(welcomeText);
-                     } else {
-                        aiMsgContainer.textContent = welcomeText;
-                     }
+                     const welcomeText = "Xin chào! Tôi là trợ lý học tập BA của bạn. Bạn muốn hỏi về chủ đề gì hôm nay? Ví dụ, hãy hỏi về <term>Phân tích SWOT</term>.";
+                     
+                     // UPDATED: Use the new render function for the welcome message
+                     aiMsgContainer.innerHTML = renderInteractiveTerms(welcomeText);
+
                      if(historyEl) historyEl.appendChild(aiMsgContainer);
                 }
                  if(historyEl) historyEl.scrollTop = historyEl.scrollHeight;
@@ -746,6 +854,46 @@
             clearBtn.addEventListener('click', () => {
                 if (confirm("Bạn có chắc muốn xóa cuộc trò chuyện này không?")) {
                     saveData("chats", moduleId, { history: [] });
+                }
+            });
+
+            // NEW: Event listeners for the interactive term modal
+            historyEl.addEventListener('click', async (e) => {
+                if (e.target.classList.contains('term-link')) {
+                    e.preventDefault();
+                    const term = e.target.dataset.term;
+
+                    modalTitle.textContent = `Giải thích: "${term}"`;
+                    modalContentContainer.innerHTML = '<div class="large-spinner"></div>';
+                    modal.style.display = 'flex';
+
+                    const definitionPrompt = `Hãy giải thích chi tiết về thuật ngữ "${term}". Cung cấp định nghĩa, một ví dụ cụ thể, và tầm quan trọng của nó trong ngành Business Analytics. Trả lời bằng tiếng Việt.`;
+                    
+                    try {
+                        if (!geminiModel) throw new Error("AI model is not available.");
+                        // Use generateContent for a single-turn request that doesn't affect the main chat history
+                        const result = await geminiModel.generateContent(definitionPrompt);
+                        const definitionText = await result.response.text();
+                        
+                        if (window.marked) {
+                            modalContentContainer.innerHTML = window.marked.parse(definitionText);
+                        } else {
+                            modalContentContainer.textContent = definitionText;
+                        }
+                    } catch (error) {
+                        console.error("Error fetching definition:", error);
+                        modalContentContainer.innerHTML = '<p style="color: var(--danger-color);">Rất tiếc, đã xảy ra lỗi khi lấy định nghĩa.</p>';
+                    }
+                }
+            });
+
+            modalCloseBtn?.addEventListener('click', () => {
+                modal.style.display = 'none';
+            });
+
+            modal?.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    modal.style.display = 'none';
                 }
             });
         }
@@ -939,7 +1087,7 @@
         }
         
         // =====================================================================
-        // === AI CASE TRAINER - UPDATED LOGIC =================================
+        // === AI CASE TRAINER - (UNCHANGED) =================================
         // =====================================================================
         function setupCaseTrainer() {
             const moduleId = 'case-trainer';
@@ -1248,7 +1396,6 @@
             }
             
             const unsub = onSnapshot(doc(db, "users", currentUser.uid, "chats", moduleId), (docSnapshot) => {
-                // SỬA LỖI: Thêm biến cờ isAnalyzing
                 if (isAnalyzing) return;
 
                 if (contentArea) contentArea.innerHTML = '';
@@ -1681,3 +1828,20 @@ The JSON response must be in the ${selectedLanguage} language.`;
     </script>
 </body>
 </html>
+```
+
+### **Tóm tắt các thay đổi**
+
+1.  **HTML**: Thêm một `div` cho `term-modal` (popup định nghĩa) ở cuối `<body>`.
+2.  **CSS**: Thêm các quy tắc CSS mới để tạo kiểu cho các thuật ngữ có thể nhấp (`.term-link`) và cho modal (lớp phủ, hộp thoại, v.v.).
+3.  **JavaScript (trong `setupLearningRoom`)**:
+    * **System Prompt mới**: "Huấn luyện" AI để tự động bọc các thuật ngữ quan trọng trong thẻ `<term>...</term>`.
+    * **Hàm `renderInteractiveTerms`**: Một hàm mới được tạo để đọc phản hồi của AI, tìm các thẻ `<term>` và biến chúng thành các nút bấm `<button>` có thể tương tác.
+    * **Logic Modal**: Thêm các trình lắng nghe sự kiện để:
+        * Phát hiện khi người dùng nhấp vào một thuật ngữ.
+        * Hiển thị modal với một spinner tải.
+        * Gửi một yêu cầu **riêng biệt** đến AI để lấy định nghĩa chi tiết cho thuật ngữ đó (việc này không ảnh hưởng đến lịch sử trò chuyện chính).
+        * Hiển thị định nghĩa nhận được vào trong modal.
+        * Đóng modal khi người dùng nhấp vào nút đóng hoặc vùng nền.
+
+Tất cả các thay đổi này đều được gói gọn trong logic của `setupLearningRoom` hoặc là các bổ sung chung (HTML/CSS) không gây xung đột, đảm bảo tính toàn vẹn của các module kh
