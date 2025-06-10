@@ -265,7 +265,7 @@
              color: var(--sidebar-bg);
         }
 
-        /* --- NEW: Term Link Styles --- */
+        /* --- Term Link Styles --- */
         .term-link {
             background-color: var(--highlight-bg);
             color: var(--accent-color);
@@ -283,7 +283,7 @@
             background-color: #fef3c7;
         }
 
-        /* --- NEW: Modal Styles --- */
+        /* --- Modal Styles --- */
         .modal-overlay {
             position: fixed;
             top: 0;
@@ -325,9 +325,48 @@
             line-height: 1;
             padding: 0 10px;
         }
-        .modal-content-container { /* Renamed for clarity */
+        .modal-content-container { 
             overflow-y: auto;
             line-height: 1.6;
+            padding-right: 10px; /* Space for scrollbar */
+        }
+        .modal-footer {
+            padding-top: 15px;
+            margin-top: 15px;
+            border-top: 1px solid var(--main-bg);
+            text-align: right;
+        }
+        /* --- NEW: Suggestion Styles in Modal --- */
+        .modal-suggestions {
+            margin-top: 20px;
+            padding-top: 15px;
+            border-top: 1px dashed #e2e8f0;
+        }
+        .modal-suggestions h4 {
+            font-size: 0.8rem;
+            color: var(--text-dark);
+            margin-top: 0;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-weight: 600;
+        }
+        .suggestion-item-btn {
+            display: block;
+            width: 100%;
+            text-align: left;
+            margin-bottom: 8px;
+            background-color: var(--main-bg);
+            color: var(--text-dark);
+            font-weight: 500;
+            border: 1px solid #e2e8f0;
+            padding: 12px 15px;
+            gap: 10px;
+        }
+        .suggestion-item-btn:hover {
+            background-color: #e2e8f0;
+            border-color: #cbd5e1;
+            color: var(--accent-hover);
         }
 
 
@@ -411,7 +450,7 @@
         </aside>
     </div>
 
-    <!-- NEW: Modal for Term Definitions -->
+    <!-- Modal for Term Definitions -->
     <div id="term-modal" class="modal-overlay" style="display: none;">
         <div class="modal-box">
             <div class="modal-header">
@@ -419,8 +458,15 @@
                 <button id="modal-close-btn" class="btn-subtle">&times;</button>
             </div>
             <div id="modal-content-container" class="modal-content-container">
-                <!-- Nội dung định nghĩa của AI sẽ được chèn vào đây -->
+                <!-- Definition content will be injected here -->
                 <div class="large-spinner"></div>
+            </div>
+            <!-- NEW: Suggestions container -->
+            <div id="modal-suggestions-container" class="modal-suggestions">
+                <!-- Suggestion buttons will be injected here -->
+            </div>
+            <div class="modal-footer">
+                <button id="save-to-notebook-btn" title="Lưu vào Sổ tay"><i class="fa-solid fa-floppy-disk"></i>&nbsp;Lưu vào Sổ tay</button>
             </div>
         </div>
     </div>
@@ -739,7 +785,7 @@
         }
         
         // =====================================================================
-        // === BA LEARNING ROOM - UPDATED WITH INTERACTIVE TERMS =================
+        // === BA LEARNING ROOM - UPDATED WITH SUGGESTIONS =======================
         // =====================================================================
         function setupLearningRoom() {
             const moduleId = 'learning-room';
@@ -748,26 +794,28 @@
             const input = document.getElementById(`${moduleId}-chat-input`);
             const clearBtn = document.getElementById(`clear-${moduleId}-history`);
             
-            // NEW: Modal elements
+            // Modal elements
             const modal = document.getElementById('term-modal');
             const modalTitle = document.getElementById('modal-title');
             const modalContentContainer = document.getElementById('modal-content-container');
+            const modalSuggestionsContainer = document.getElementById('modal-suggestions-container'); // NEW
             const modalCloseBtn = document.getElementById('modal-close-btn');
+            const saveToNotebookBtn = document.getElementById('save-to-notebook-btn');
 
-            if(!historyEl || !form || !input || !clearBtn || !modal) return;
+            if(!historyEl || !form || !input || !clearBtn || !modal || !saveToNotebookBtn || !modalSuggestionsContainer) return;
             
             let history = [];
             let chatSession = null;
             let isThinking = false;
+            let termToSave = ''; 
+            let definitionToSave = '';
             
-            // NEW: Updated system instruction
             const systemInstruction = {
                 role: "system",
                 parts: [{ text: `You are a helpful assistant for Business Analytics students. All your responses must be in Vietnamese.
 CRITICAL INSTRUCTION: Whenever you mention a specific Business Analytics term, a technical keyword, or an important concept, you MUST wrap it in custom XML tags like this: <term>A/B Testing</term>. This is a strict requirement for your output.`}]
             };
 
-            // NEW: Helper function to render interactive terms
             function renderInteractiveTerms(responseText) {
                 if (!responseText) return '';
                 const processedText = responseText.replace(/<term>(.*?)<\/term>/g, (match, term) => {
@@ -793,7 +841,6 @@ CRITICAL INSTRUCTION: Whenever you mention a specific Business Analytics term, a
                         const messageDiv = document.createElement('div');
                         messageDiv.className = `chat-message ${sender}-message`;
                         
-                        // UPDATED: Use the new render function for AI messages
                         if (sender === 'ai') {
                              messageDiv.innerHTML = renderInteractiveTerms(msg.parts[0].text);
                         } else if (window.marked) {
@@ -808,10 +855,7 @@ CRITICAL INSTRUCTION: Whenever you mention a specific Business Analytics term, a
                      const aiMsgContainer = document.createElement('div');
                      aiMsgContainer.className = 'chat-message ai-message';
                      const welcomeText = "Xin chào! Tôi là trợ lý học tập BA của bạn. Bạn muốn hỏi về chủ đề gì hôm nay? Ví dụ, hãy hỏi về <term>Phân tích SWOT</term>.";
-                     
-                     // UPDATED: Use the new render function for the welcome message
                      aiMsgContainer.innerHTML = renderInteractiveTerms(welcomeText);
-
                      if(historyEl) historyEl.appendChild(aiMsgContainer);
                 }
                  if(historyEl) historyEl.scrollTop = historyEl.scrollHeight;
@@ -820,14 +864,15 @@ CRITICAL INSTRUCTION: Whenever you mention a specific Business Analytics term, a
             
             form.addEventListener('submit', async e => {
                 e.preventDefault();
-                const userQuery = input.value.trim();
+                // If triggered by suggestion, the query is in the detail
+                const userQuery = e.detail?.query || input.value.trim();
                 if (!userQuery || !geminiModel || isThinking) return;
                 
                 isThinking = true;
                 const submitButton = form.querySelector('button');
                 const originalButtonHTML = submitButton.innerHTML;
                 
-                input.value = '';
+                if (!e.detail?.query) input.value = '';
                 submitButton.disabled = true;
                 submitButton.innerHTML = `<div class="small-spinner"></div>`;
 
@@ -857,29 +902,70 @@ CRITICAL INSTRUCTION: Whenever you mention a specific Business Analytics term, a
                 }
             });
 
-            // NEW: Event listeners for the interactive term modal
             historyEl.addEventListener('click', async (e) => {
                 if (e.target.classList.contains('term-link')) {
                     e.preventDefault();
                     const term = e.target.dataset.term;
 
-                    modalTitle.textContent = `Giải thích: "${term}"`;
+                    // Reset modal state
+                    saveToNotebookBtn.disabled = true;
+                    saveToNotebookBtn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i>&nbsp;Lưu vào Sổ tay';
+                    termToSave = '';
+                    definitionToSave = '';
                     modalContentContainer.innerHTML = '<div class="large-spinner"></div>';
+                    modalSuggestionsContainer.innerHTML = '';
+                    
+                    modalTitle.textContent = `Giải thích: "${term}"`;
                     modal.style.display = 'flex';
 
-                    const definitionPrompt = `Hãy giải thích chi tiết về thuật ngữ "${term}". Cung cấp định nghĩa, một ví dụ cụ thể, và tầm quan trọng của nó trong ngành Business Analytics. Trả lời bằng tiếng Việt.`;
+                    // NEW: Updated prompt to ask for suggestions
+                    const definitionPrompt = `Hãy giải thích chi tiết về thuật ngữ "${term}". Cung cấp định nghĩa, một ví dụ cụ thể, và tầm quan trọng của nó trong ngành Business Analytics.
+Sau khi giải thích xong, hãy thêm một phần có tiêu đề "GỢI Ý KHÁM PHÁ:" và liệt kê 2-3 chủ đề hoặc câu hỏi liên quan, mỗi mục trên một dòng và bắt đầu bằng dấu "-".
+Trả lời bằng tiếng Việt.`;
                     
                     try {
                         if (!geminiModel) throw new Error("AI model is not available.");
-                        // Use generateContent for a single-turn request that doesn't affect the main chat history
                         const result = await geminiModel.generateContent(definitionPrompt);
-                        const definitionText = await result.response.text();
+                        let fullResponseText = await result.response.text();
                         
-                        if (window.marked) {
-                            modalContentContainer.innerHTML = window.marked.parse(definitionText);
-                        } else {
-                            modalContentContainer.textContent = definitionText;
+                        let definitionPart = fullResponseText;
+                        let suggestionsPart = '';
+                        const suggestionMarker = 'GỢI Ý KHÁM PHÁ:';
+
+                        if (fullResponseText.includes(suggestionMarker)) {
+                            const parts = fullResponseText.split(suggestionMarker);
+                            definitionPart = parts[0];
+                            suggestionsPart = parts[1];
                         }
+
+                        termToSave = term;
+                        definitionToSave = definitionPart.trim(); // Save only the definition part
+
+                        if (window.marked) {
+                            modalContentContainer.innerHTML = window.marked.parse(definitionPart);
+                        } else {
+                            modalContentContainer.textContent = definitionPart;
+                        }
+
+                        // Render suggestions
+                        if (suggestionsPart) {
+                            const suggestionsHeader = document.createElement('h4');
+                            suggestionsHeader.textContent = 'Gợi ý Khám phá';
+                            modalSuggestionsContainer.appendChild(suggestionsHeader);
+
+                            const suggestions = suggestionsPart.trim().split('\n').filter(s => s.trim().startsWith('-'));
+                            suggestions.forEach(sugg => {
+                                const button = document.createElement('button');
+                                button.className = 'suggestion-item-btn';
+                                const suggestionText = sugg.replace('-', '').trim();
+                                button.innerHTML = `<i class="fa-solid fa-lightbulb"></i> ${suggestionText}`;
+                                button.dataset.suggestion = suggestionText;
+                                modalSuggestionsContainer.appendChild(button);
+                            });
+                        }
+                        
+                        saveToNotebookBtn.disabled = false;
+
                     } catch (error) {
                         console.error("Error fetching definition:", error);
                         modalContentContainer.innerHTML = '<p style="color: var(--danger-color);">Rất tiếc, đã xảy ra lỗi khi lấy định nghĩa.</p>';
@@ -894,6 +980,31 @@ CRITICAL INSTRUCTION: Whenever you mention a specific Business Analytics term, a
             modal?.addEventListener('click', (e) => {
                 if (e.target === modal) {
                     modal.style.display = 'none';
+                }
+            });
+            
+            saveToNotebookBtn.addEventListener('click', () => {
+                const notebookTextarea = document.getElementById('scratchpad-textarea');
+                if (!notebookTextarea || !termToSave || !definitionToSave) return;
+
+                const currentContent = notebookTextarea.value;
+                const newEntry = `\n\n## ${termToSave}\n\n${definitionToSave.trim()}\n\n---`;
+                
+                notebookTextarea.value = currentContent + newEntry;
+                notebookTextarea.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+                
+                saveToNotebookBtn.disabled = true;
+                saveToNotebookBtn.innerHTML = '<i class="fa-solid fa-check"></i>&nbsp;Đã lưu!';
+            });
+
+            // NEW: Event listener for suggestion buttons inside the modal
+            modalSuggestionsContainer.addEventListener('click', (e) => {
+                const button = e.target.closest('.suggestion-item-btn');
+                if (button) {
+                    const suggestionText = button.dataset.suggestion;
+                    modal.style.display = 'none'; // Close modal
+                    input.value = suggestionText; // Put suggestion in main input
+                    form.dispatchEvent(new CustomEvent('submit', { detail: { query: suggestionText } })); // Submit form
                 }
             });
         }
@@ -1827,4 +1938,4 @@ The JSON response must be in the ${selectedLanguage} language.`;
         }
     </script>
 </body>
-</html>
+</ht
