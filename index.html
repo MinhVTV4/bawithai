@@ -968,6 +968,7 @@
             let currentArchiveId = null; 
             let bookmarkedPrompts = new Set(); 
             let bookmarkedDocs = new Map();
+            let isAnalyzing = false;
             
             const updateProgress = (mainText, detailText = '') => {
                 if (progressStatusText) progressStatusText.textContent = mainText;
@@ -1247,6 +1248,9 @@
             }
             
             const unsub = onSnapshot(doc(db, "users", currentUser.uid, "chats", moduleId), (docSnapshot) => {
+                // SỬA LỖI: Thêm biến cờ isAnalyzing
+                if (isAnalyzing) return;
+
                 if (contentArea) contentArea.innerHTML = '';
                 isThinking = false;
                 const data = docSnapshot.data();
@@ -1337,10 +1341,10 @@
                         throw new Error("Vui lòng chọn một file để phân tích.");
                     }
                     
+                    isAnalyzing = true;
                     analyzeBtn.disabled = true;
                     analyzeBtn.innerHTML = `<span><div class="small-spinner"></div> Đang xử lý...</span>`;
-
-                    // SỬA LỖI: Chuyển đổi giao diện ngay lập tức
+                    
                     uploadSection.style.display = 'none';
                     progressContainer.style.display = 'block';
                     updateProgress('Bước 1/4: Đang xử lý file...');
@@ -1363,10 +1367,12 @@
                             else if (fileExtension === 'docx') { const res = await mammoth.extractRawText({arrayBuffer: fileContent}); dataContext = res.value; }
                         } catch (err) { 
                             showAnalysisError(`Lỗi khi đọc file: ${err.message}`); 
+                            isAnalyzing = false;
                             return; 
                         }
                         if (!dataContext) { 
                             showAnalysisError("Không thể đọc file hoặc định dạng không được hỗ trợ."); 
+                            isAnalyzing = false;
                             return; 
                         }
 
@@ -1392,24 +1398,24 @@ The JSON response must be in the ${selectedLanguage} language.`;
                             JSON.parse(cleanedJsonString); 
                             updateProgress('Bước 4/4: Hoàn tất! Đang hiển thị kết quả...');
                             
+                            isAnalyzing = false;
                             await saveData("chats", moduleId, { history: [{ role: 'user', parts: [{ text: initialPrompt }] }, { role: 'model', parts: [{ text: cleanedJsonString }] }], fileName: file.name });
-                            
-                            setTimeout(() => {
-                                progressContainer.style.display = 'none';
-                            }, 1000);
 
                         } catch (err) { 
+                            isAnalyzing = false;
                             console.error("Error initial analysis:", err, "Raw AI response:", responseText);
                             showAnalysisError("AI trả về phản hồi không hợp lệ. Vui lòng thử lại."); 
                         }
                     };
 
                     reader.onerror = () => {
+                        isAnalyzing = false;
                         showAnalysisError('Lỗi nghiêm trọng khi đọc file. Không thể tiếp tục.');
                     };
 
                     if (['csv', 'txt'].includes(file.name.split('.').pop().toLowerCase())) reader.readAsText(file); else reader.readAsArrayBuffer(file);
                 } catch (err) {
+                    isAnalyzing = false;
                     console.error("Analysis failed:", err);
                     showAnalysisError(`Không thể bắt đầu phân tích: ${err.message}`);
                 }
@@ -1563,7 +1569,6 @@ The JSON response must be in the ${selectedLanguage} language.`;
                 const analyzeBtn = document.getElementById('analyzeFileButton');
                 if(analyzeBtn) {
                     analyzeBtn.disabled = true;
-                    // SỬA LỖI: Reset lại text của nút
                     analyzeBtn.innerHTML = '<span>Bắt đầu Phân tích</span>';
                 }
 
