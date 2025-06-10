@@ -1828,20 +1828,3 @@ The JSON response must be in the ${selectedLanguage} language.`;
     </script>
 </body>
 </html>
-```
-
-### **Tóm tắt các thay đổi**
-
-1.  **HTML**: Thêm một `div` cho `term-modal` (popup định nghĩa) ở cuối `<body>`.
-2.  **CSS**: Thêm các quy tắc CSS mới để tạo kiểu cho các thuật ngữ có thể nhấp (`.term-link`) và cho modal (lớp phủ, hộp thoại, v.v.).
-3.  **JavaScript (trong `setupLearningRoom`)**:
-    * **System Prompt mới**: "Huấn luyện" AI để tự động bọc các thuật ngữ quan trọng trong thẻ `<term>...</term>`.
-    * **Hàm `renderInteractiveTerms`**: Một hàm mới được tạo để đọc phản hồi của AI, tìm các thẻ `<term>` và biến chúng thành các nút bấm `<button>` có thể tương tác.
-    * **Logic Modal**: Thêm các trình lắng nghe sự kiện để:
-        * Phát hiện khi người dùng nhấp vào một thuật ngữ.
-        * Hiển thị modal với một spinner tải.
-        * Gửi một yêu cầu **riêng biệt** đến AI để lấy định nghĩa chi tiết cho thuật ngữ đó (việc này không ảnh hưởng đến lịch sử trò chuyện chính).
-        * Hiển thị định nghĩa nhận được vào trong modal.
-        * Đóng modal khi người dùng nhấp vào nút đóng hoặc vùng nền.
-
-Tất cả các thay đổi này đều được gói gọn trong logic của `setupLearningRoom` hoặc là các bổ sung chung (HTML/CSS) không gây xung đột, đảm bảo tính toàn vẹn của các module kh
