@@ -1249,7 +1249,19 @@
                 isThinking = false;
                 const data = docSnapshot.data();
                 const sessionExists = data && data.history && data.history.length > 0;
+                
+                // === THAY ĐỔI: Cập nhật nút dựa vào ngữ cảnh ===
                 currentArchiveId = (data && data.activeArchiveId) ? data.activeArchiveId : null;
+                const clearBtnIcon = clearBtn.querySelector('i');
+                if (currentArchiveId) {
+                    clearBtn.title = 'Cập nhật phiên & Bắt đầu lại';
+                    if (clearBtnIcon) clearBtnIcon.className = 'fa-solid fa-arrows-rotate';
+                } else {
+                    clearBtn.title = 'Lưu trữ phiên & Bắt đầu lại';
+                    if (clearBtnIcon) clearBtnIcon.className = 'fa-solid fa-floppy-disk';
+                }
+                // ============================================
+
                 currentFileName = data?.fileName || '';
                 history = getValidHistoryForChat(sessionExists ? data.history : []);
                 if (geminiModel) chatSession = geminiModel.startChat({ history });
@@ -1665,4 +1677,6 @@ The JSON response must be in the ${selectedLanguage} language.`;
         }
     </script>
 </body>
-</ht
+</html>" from the canvas.
+
+Please proceed. Remember the rule about not touching anything that is not releva
